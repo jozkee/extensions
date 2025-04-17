@@ -3,7 +3,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
@@ -15,7 +14,6 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Shared.Diagnostics;
 using OpenAI;
 using OpenAI.Audio;
 using OpenAI.Chat;
@@ -786,20 +784,12 @@ internal sealed partial class OpenAIChatClient : IChatClient
 }
 
 /// <summary>Provides extension methods for working with <see cref="OpenAIClient"/>s.</summary>
-public static class OpenAIClientExtensions2
+public static class OpenAIClientExtensions
 {
-    /// <summary>Gets an <see cref="IChatClient"/> for use with this <see cref="OpenAIClient"/>.</summary>
-    /// <param name="openAIClient">The client.</param>
-    /// <param name="modelId">The model.</param>
-    /// <returns>An <see cref="IChatClient"/> that can be used to converse via the <see cref="OpenAIClient"/>.</returns>
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    [Obsolete("This method will be removed in an upcoming release.")]
-    public static IChatClient AsChatClient(this OpenAIClient openAIClient, string modelId) =>
-        new OpenAIChatClient(Throw.IfNull(openAIClient).GetChatClient(modelId));
-
     /// <summary>Gets an <see cref="IChatClient"/> for use with this <see cref="ChatClient"/>.</summary>
     /// <param name="chatClient">The client.</param>
     /// <returns>An <see cref="IChatClient"/> that can be used to converse via the <see cref="ChatClient"/>.</returns>
+    [Experimental("MEAI001")]
     public static IChatClient AsIChatClient(this ChatClient chatClient) =>
         new OpenAIChatClient(chatClient);
 
@@ -816,26 +806,16 @@ public static class OpenAIClientExtensions2
     public static ISpeechToTextClient AsISpeechToTextClient(this AudioClient audioClient) =>
         new OpenAISpeechToTextClient(audioClient);
 
-    /// <summary>Gets an <see cref="IEmbeddingGenerator{String, Single}"/> for use with this <see cref="OpenAIClient"/>.</summary>
-    /// <param name="openAIClient">The client.</param>
-    /// <param name="modelId">The model to use.</param>
-    /// <param name="dimensions">The number of dimensions to generate in each embedding.</param>
-    /// <returns>An <see cref="IEmbeddingGenerator{String, Embedding}"/> that can be used to generate embeddings via the <see cref="EmbeddingClient"/>.</returns>
-    [EditorBrowsable(EditorBrowsableState.Never)]
-    [Obsolete("This method will be removed in an upcoming release.")]
-    public static IEmbeddingGenerator<string, Embedding<float>> AsEmbeddingGenerator(this OpenAIClient openAIClient, string modelId, int? dimensions = null) =>
-        new OpenAIEmbeddingGenerator2(Throw.IfNull(openAIClient).GetEmbeddingClient(modelId), dimensions);
-
     /// <summary>Gets an <see cref="IEmbeddingGenerator{String, Single}"/> for use with this <see cref="EmbeddingClient"/>.</summary>
     /// <param name="embeddingClient">The client.</param>
     /// <param name="defaultModelDimensions">The number of dimensions to generate in each embedding.</param>
     /// <returns>An <see cref="IEmbeddingGenerator{String, Embedding}"/> that can be used to generate embeddings via the <see cref="EmbeddingClient"/>.</returns>
     public static IEmbeddingGenerator<string, Embedding<float>> AsIEmbeddingGenerator(this EmbeddingClient embeddingClient, int? defaultModelDimensions = null) =>
-        new OpenAIEmbeddingGenerator2(embeddingClient, defaultModelDimensions);
+        new OpenAIEmbeddingGenerator(embeddingClient, defaultModelDimensions);
 }
 
 /// <summary>An <see cref="IEmbeddingGenerator{String, Embedding}"/> for an OpenAI <see cref="EmbeddingClient"/>.</summary>
-internal sealed class OpenAIEmbeddingGenerator2 : IEmbeddingGenerator<string, Embedding<float>>
+internal sealed class OpenAIEmbeddingGenerator : IEmbeddingGenerator<string, Embedding<float>>
 {
     /// <summary>Default OpenAI endpoint.</summary>
     private const string DefaultOpenAIEndpoint = "https://api.openai.com/v1";
@@ -849,12 +829,12 @@ internal sealed class OpenAIEmbeddingGenerator2 : IEmbeddingGenerator<string, Em
     /// <summary>The number of dimensions produced by the generator.</summary>
     private readonly int? _dimensions;
 
-    /// <summary>Initializes a new instance of the <see cref="OpenAIEmbeddingGenerator2"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="OpenAIEmbeddingGenerator"/> class.</summary>
     /// <param name="embeddingClient">The underlying client.</param>
     /// <param name="defaultModelDimensions">The number of dimensions to generate in each embedding.</param>
     /// <exception cref="ArgumentNullException"><paramref name="embeddingClient"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="defaultModelDimensions"/> is not positive.</exception>
-    public OpenAIEmbeddingGenerator2(EmbeddingClient embeddingClient, int? defaultModelDimensions = null)
+    public OpenAIEmbeddingGenerator(EmbeddingClient embeddingClient, int? defaultModelDimensions = null)
     {
         _ = Throw.IfNull(embeddingClient);
         if (defaultModelDimensions < 1)
@@ -1798,4 +1778,51 @@ internal sealed class OpenAISpeechToTextClient : ISpeechToTextClient
 
         return result;
     }
+}
+
+#pragma warning disable CA1716
+#pragma warning disable SA1204
+internal static class Throw
+{
+    /// <summary>
+    /// Throws an <see cref="System.ArgumentNullException"/> if the specified argument is <see langword="null"/>.
+    /// </summary>
+    /// <typeparam name="T">Argument type to be checked for <see langword="null"/>.</typeparam>
+    /// <param name="argument">Object to be checked for <see langword="null"/>.</param>
+    /// <param name="paramName">The name of the parameter being checked.</param>
+    /// <returns>The original value of <paramref name="argument"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [return: NotNull]
+    public static T IfNull<T>([NotNull] T argument, [CallerArgumentExpression(nameof(argument))] string paramName = "")
+    {
+        if (argument is null)
+        {
+            ArgumentNullException(paramName);
+        }
+
+        return argument;
+    }
+
+    /// <summary>
+    /// Throws an <see cref="System.ArgumentOutOfRangeException"/>.
+    /// </summary>
+    /// <param name="paramName">The name of the parameter that caused the exception.</param>
+    /// <param name="message">A message that describes the error.</param>
+#if !NET6_0_OR_GREATER
+    [MethodImpl(MethodImplOptions.NoInlining)]
+#endif
+    [DoesNotReturn]
+    public static void ArgumentOutOfRangeException(string paramName, string? message)
+        => throw new ArgumentOutOfRangeException(paramName, message);
+
+    /// <summary>
+    /// Throws an <see cref="System.ArgumentNullException"/>.
+    /// </summary>
+    /// <param name="paramName">The name of the parameter that caused the exception.</param>
+#if !NET6_0_OR_GREATER
+    [MethodImpl(MethodImplOptions.NoInlining)]
+#endif
+    [DoesNotReturn]
+    public static void ArgumentNullException(string paramName)
+        => throw new ArgumentNullException(paramName);
 }

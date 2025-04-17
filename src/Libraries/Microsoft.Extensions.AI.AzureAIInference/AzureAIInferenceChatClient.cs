@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,7 +23,7 @@ using Microsoft.Shared.Diagnostics;
 namespace Microsoft.Extensions.AI;
 
 /// <summary>Represents an <see cref="IChatClient"/> for an Azure AI Inference <see cref="ChatCompletionsClient"/>.</summary>
-internal sealed class AzureAIInferenceChatClient : IChatClient
+internal sealed partial class AzureAIInferenceChatClient : IChatClient
 {
     /// <summary>Metadata about the client.</summary>
     private readonly ChatClientMetadata _metadata;
@@ -534,4 +535,12 @@ internal sealed class AzureAIInferenceChatClient : IChatClient
         FunctionCallContent.CreateFromParsedArguments(json, callId, name,
             argumentParser: static json => JsonSerializer.Deserialize(json,
                 (JsonTypeInfo<IDictionary<string, object>>)AIJsonUtilities.DefaultOptions.GetTypeInfo(typeof(IDictionary<string, object>)))!);
+
+    /// <summary>Source-generated JSON type information.</summary>
+    [JsonSourceGenerationOptions(JsonSerializerDefaults.Web,
+        UseStringEnumConverter = true,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        WriteIndented = true)]
+    [JsonSerializable(typeof(AzureAIChatToolJson))]
+    internal sealed partial class JsonContext : JsonSerializerContext;
 }

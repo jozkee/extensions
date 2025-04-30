@@ -322,7 +322,7 @@ internal sealed class AzureAIInferenceChatClient : IChatClient
                 }
             }
 
-            if (result.ToolChoice is null)
+            if (result.ToolChoice is null && result.Tools.Count > 0)
             {
                 switch (options.ToolMode)
                 {

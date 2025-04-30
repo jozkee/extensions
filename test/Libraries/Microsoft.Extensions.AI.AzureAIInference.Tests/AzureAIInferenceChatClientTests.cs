@@ -47,7 +47,7 @@ public class AzureAIInferenceChatClientTests
     }
 
     [Fact]
-    public async Task IChatClient_WithNullModel_ChatOptionsOptions_WithNotNullModel_NonStreaming()
+    public async Task IChatClient_WithNullModel_ChatOptions_WithNotNullModel_NonStreaming()
     {
         const string Input = """
             {
@@ -81,7 +81,7 @@ public class AzureAIInferenceChatClientTests
     }
 
     [Fact]
-    public async Task IChatClient_WithNullModel_ChatOptionsOptions_WithNotNullModel_Streaming()
+    public async Task IChatClient_WithNullModel_ChatOptions_WithNotNullModel_Streaming()
     {
         const string Input = """
             {
@@ -132,7 +132,6 @@ public class AzureAIInferenceChatClientTests
         Assert.Equal("Hello! How can I assist you today?", responseText);
     }
 
-    // add test to verify that RawRepresentation settings are not overwritten by ChatOptions.
     [Fact]
     public async Task ChatOptions_DoNotOverwrite_NotNullPropertiesInRawRepresentation_NonStreaming()
     {

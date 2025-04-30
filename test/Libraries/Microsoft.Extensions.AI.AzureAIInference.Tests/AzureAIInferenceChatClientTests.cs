@@ -212,6 +212,85 @@ public class AzureAIInferenceChatClientTests
         Assert.Equal("Hello! How can I assist you today?", response.Text);
     }
 
+    [Fact]
+    public async Task ChatOptions_DoNotOverwriteNotNullProperties_InRawRepresentation_Streaming()
+    {
+        const string Input = """
+            {
+              "messages":[{"role":"user","content":"hello"}],
+              "model":"gpt-4o-mini",
+              "frequency_penalty":0.75,
+              "max_tokens":10,
+              "top_p":0.5,
+              "presence_penalty":0.5,
+              "temperature":0.5,
+              "seed":42,
+              "stop":["hello","world"],
+              "response_format":{"type":"text"},
+              "tools":[
+                  {"type":"function","function":{"name":"GetPersonAge","description":"Gets the age of the specified person.","parameters":{"type":"object","required":["personName"],"properties":{"personName":{"description":"The person whose age is being requested","type":"string"}}}}},
+                  {"type":"function","function":{"name":"GetPersonAge","description":"Gets the age of the specified person.","parameters":{"type": "object","required": ["personName"],"properties": {"personName": {"description": "The person whose age is being requested","type": "string"}}}}}
+                  ],
+              "tool_choice":"auto",
+              "stream":true
+            }
+            """;
+
+        const string Output = """
+            data: {"id":"chatcmpl-ADx3PvAnCwJg0woha4pYsBTi3ZpOI","object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant","content":"Hello! "}}]}
+            
+            data: {"id":"chatcmpl-ADx3PvAnCwJg0woha4pYsBTi3ZpOI","object":"chat.completion.chunk","choices":[{"delta":{"content":"How can I assist you today?"}}]}
+            
+            data: {"id":"chatcmpl-ADx3PvAnCwJg0woha4pYsBTi3ZpOI","object":"chat.completion.chunk","choices":[{"delta":{},"finish_reason":"stop"}]}
+            
+            data: [DONE]
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateChatClient(httpClient, modelId: null!);
+        AIFunction tool = AIFunctionFactory.Create(([Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.");
+
+        ChatCompletionsOptions azureAIOptions = new()
+        {
+            Messages = [new ChatRequestUserMessage("overwrite me!")], // this one should be overwritten.
+            Model = "gpt-4o-mini",
+            FrequencyPenalty = 0.75f,
+            MaxTokens = 10,
+            NucleusSamplingFactor = 0.5f,
+            PresencePenalty = 0.5f,
+            Temperature = 0.5f,
+            Seed = 42,
+        };
+        azureAIOptions.StopSequences.Add("hello"); // this one merges with the other.
+        azureAIOptions.Tools.Add(ToAzureAIChatTool(tool)); // this one merges with the other.
+        azureAIOptions.ToolChoice = ChatCompletionsToolChoice.Auto;
+        azureAIOptions.ResponseFormat = ChatCompletionsResponseFormat.CreateTextFormat();
+
+        ChatOptions chatOptions = new ChatOptions
+        {
+            RawRepresentation = azureAIOptions,
+            FrequencyPenalty = 0.1f,
+            MaxOutputTokens = 1,
+            TopP = 0.1f,
+            PresencePenalty = 0.1f,
+            Temperature = 0.1f,
+            Seed = 1,
+            StopSequences = ["world"],
+            Tools = [tool],
+            ToolMode = ChatToolMode.None,
+            ResponseFormat = ChatResponseFormat.Json
+        };
+
+        string responseText = string.Empty;
+        await foreach (var update in client.GetStreamingResponseAsync("hello", chatOptions))
+        {
+            responseText += update.Text;
+        }
+
+        Assert.Equal("Hello! How can I assist you today?", responseText);
+    }
+
     private static ChatCompletionsToolDefinition ToAzureAIChatTool(AIFunction aiFunction)
     {
         // Map to an intermediate model so that redundant properties are skipped.

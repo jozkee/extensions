@@ -287,10 +287,8 @@ internal sealed class AzureAIInferenceChatClient : IChatClient
             return CreateAzureAIOptions(chatContents, options);
         }
 
-        ChatCompletionsOptions result;
-        if (options.RawRepresentation is ChatCompletionsOptions azureAIOptions)
+        if (options.RawRepresentation is ChatCompletionsOptions result)
         {
-            result = azureAIOptions;
             result.Messages = ToAzureAIInferenceChatMessages(chatContents).ToList();
             result.Model = options.ModelId ?? _metadata.DefaultModelId ?? throw new InvalidOperationException("No model id was provided when either constructing the client or in the chat options.");
         }

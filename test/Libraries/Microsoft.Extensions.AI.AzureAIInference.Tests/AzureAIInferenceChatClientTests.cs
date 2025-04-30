@@ -134,7 +134,7 @@ public class AzureAIInferenceChatClientTests
 
     // add test to verify that RawRepresentation settings are not overwritten by ChatOptions.
     [Fact]
-    public async Task ChatOptions_DoNotOverwriteNotNullProperties_InRawRepresentation_NonStreaming()
+    public async Task ChatOptions_DoNotOverwrite_NotNullPropertiesInRawRepresentation_NonStreaming()
     {
         const string Input = """
             {
@@ -195,6 +195,7 @@ public class AzureAIInferenceChatClientTests
         ChatOptions chatOptions = new ChatOptions
         {
             RawRepresentation = azureAIOptions,
+            ModelId = null,
             FrequencyPenalty = 0.1f,
             MaxOutputTokens = 1,
             TopP = 0.1f,
@@ -213,7 +214,7 @@ public class AzureAIInferenceChatClientTests
     }
 
     [Fact]
-    public async Task ChatOptions_DoNotOverwriteNotNullProperties_InRawRepresentation_Streaming()
+    public async Task ChatOptions_DoNotOverwrite_NotNullPropertiesInRawRepresentation_Streaming()
     {
         const string Input = """
             {
@@ -270,6 +271,161 @@ public class AzureAIInferenceChatClientTests
         ChatOptions chatOptions = new ChatOptions
         {
             RawRepresentation = azureAIOptions,
+            ModelId = null,
+            FrequencyPenalty = 0.1f,
+            MaxOutputTokens = 1,
+            TopP = 0.1f,
+            PresencePenalty = 0.1f,
+            Temperature = 0.1f,
+            Seed = 1,
+            StopSequences = ["world"],
+            Tools = [tool],
+            ToolMode = ChatToolMode.None,
+            ResponseFormat = ChatResponseFormat.Json
+        };
+
+        string responseText = string.Empty;
+        await foreach (var update in client.GetStreamingResponseAsync("hello", chatOptions))
+        {
+            responseText += update.Text;
+        }
+
+        Assert.Equal("Hello! How can I assist you today?", responseText);
+    }
+
+    [Fact]
+    public async Task ChatOptions_Overwrite_NullPropertiesInRawRepresentation_NonStreaming()
+    {
+        const string Input = """
+            {
+              "messages":[{"role":"user","content":"hello"}],
+              "model":"gpt-4o-mini",
+              "frequency_penalty":0.1,
+              "max_tokens":1,
+              "top_p":0.1,
+              "presence_penalty":0.1,
+              "temperature":0.1,
+              "seed":1,
+              "stop":["world"],
+              "response_format":{"type":"json_object"},
+              "tools":[
+                  {"type":"function","function":{"name":"GetPersonAge","description":"Gets the age of the specified person.","parameters":{"type":"object","required":["personName"],"properties":{"personName":{"description":"The person whose age is being requested","type":"string"}}}}}
+                ],
+              "tool_choice":"none"
+            }
+            """;
+
+        const string Output = """
+            {
+              "id": "chatcmpl-ADx3PvAnCwJg0woha4pYsBTi3ZpOI",
+              "object": "chat.completion",
+              "choices": [
+                {
+                  "message": {
+                    "role": "assistant",
+                    "content": "Hello! How can I assist you today?"
+                  }
+                }
+              ]
+            }
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateChatClient(httpClient, modelId: null!);
+        AIFunction tool = AIFunctionFactory.Create(([Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.");
+
+        ChatCompletionsOptions azureAIOptions = new();
+        Assert.Empty(azureAIOptions.Messages);
+        Assert.Null(azureAIOptions.Model);
+        Assert.Null(azureAIOptions.FrequencyPenalty);
+        Assert.Null(azureAIOptions.MaxTokens);
+        Assert.Null(azureAIOptions.NucleusSamplingFactor);
+        Assert.Null(azureAIOptions.PresencePenalty);
+        Assert.Null(azureAIOptions.Temperature);
+        Assert.Null(azureAIOptions.Seed);
+        Assert.Empty(azureAIOptions.StopSequences);
+        Assert.Empty(azureAIOptions.Tools);
+        Assert.Null(azureAIOptions.ToolChoice);
+        Assert.Null(azureAIOptions.ResponseFormat);
+
+        ChatOptions chatOptions = new ChatOptions
+        {
+            RawRepresentation = azureAIOptions,
+            ModelId = "gpt-4o-mini",
+            FrequencyPenalty = 0.1f,
+            MaxOutputTokens = 1,
+            TopP = 0.1f,
+            PresencePenalty = 0.1f,
+            Temperature = 0.1f,
+            Seed = 1,
+            StopSequences = ["world"],
+            Tools = [tool],
+            ToolMode = ChatToolMode.None,
+            ResponseFormat = ChatResponseFormat.Json
+        };
+
+        var response = await client.GetResponseAsync("hello", chatOptions);
+        Assert.NotNull(response);
+        Assert.Equal("Hello! How can I assist you today?", response.Text);
+    }
+
+    [Fact]
+    public async Task ChatOptions_Overwrite_NullPropertiesInRawRepresentation_Streaming()
+    {
+        const string Input = """
+            {
+              "messages":[{"role":"user","content":"hello"}],
+              "model":"gpt-4o-mini",
+              "frequency_penalty":0.1,
+              "max_tokens":1,
+              "top_p":0.1,
+              "presence_penalty":0.1,
+              "temperature":0.1,
+              "seed":1,
+              "stop":["world"],
+              "response_format":{"type":"json_object"},
+              "tools":[
+                  {"type":"function","function":{"name":"GetPersonAge","description":"Gets the age of the specified person.","parameters":{"type":"object","required":["personName"],"properties":{"personName":{"description":"The person whose age is being requested","type":"string"}}}}}
+                ],
+              "tool_choice":"none",
+              "stream":true
+            }
+            """;
+
+        const string Output = """
+            data: {"id":"chatcmpl-ADx3PvAnCwJg0woha4pYsBTi3ZpOI","object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant","content":"Hello! "}}]}
+            
+            data: {"id":"chatcmpl-ADx3PvAnCwJg0woha4pYsBTi3ZpOI","object":"chat.completion.chunk","choices":[{"delta":{"content":"How can I assist you today?"}}]}
+            
+            data: {"id":"chatcmpl-ADx3PvAnCwJg0woha4pYsBTi3ZpOI","object":"chat.completion.chunk","choices":[{"delta":{},"finish_reason":"stop"}]}
+            
+            data: [DONE]
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateChatClient(httpClient, modelId: null!);
+        AIFunction tool = AIFunctionFactory.Create(([Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.");
+
+        ChatCompletionsOptions azureAIOptions = new();
+        Assert.Empty(azureAIOptions.Messages);
+        Assert.Null(azureAIOptions.Model);
+        Assert.Null(azureAIOptions.FrequencyPenalty);
+        Assert.Null(azureAIOptions.MaxTokens);
+        Assert.Null(azureAIOptions.NucleusSamplingFactor);
+        Assert.Null(azureAIOptions.PresencePenalty);
+        Assert.Null(azureAIOptions.Temperature);
+        Assert.Null(azureAIOptions.Seed);
+        Assert.Empty(azureAIOptions.StopSequences);
+        Assert.Empty(azureAIOptions.Tools);
+        Assert.Null(azureAIOptions.ToolChoice);
+        Assert.Null(azureAIOptions.ResponseFormat);
+
+        ChatOptions chatOptions = new ChatOptions
+        {
+            RawRepresentation = azureAIOptions,
+            ModelId = "gpt-4o-mini",
             FrequencyPenalty = 0.1f,
             MaxOutputTokens = 1,
             TopP = 0.1f,

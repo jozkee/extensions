@@ -134,12 +134,25 @@ public class AzureAIInferenceChatClientTests
 
     // add test to verify that RawRepresentation settings are not overwritten by ChatOptions.
     [Fact]
-    public async Task ChatOptions_RawRepresentation_NotOverwritten_NonStreaming()
+    public async Task ChatOptions_DoNotOverwriteNotNullProperties_InRawRepresentation_NonStreaming()
     {
         const string Input = """
             {
-                "messages":[{"role":"user", "content":"hello"}],
-                "model":"gpt-4o-mini"
+              "messages":[{"role":"user","content":"hello"}],
+              "model":"gpt-4o-mini",
+              "frequency_penalty":0.75,
+              "max_tokens":10,
+              "top_p":0.5,
+              "presence_penalty":0.5,
+              "temperature":0.5,
+              "seed":42,
+              "stop":["hello","world"],
+              "response_format":{"type":"text"},
+              "tools":[
+                  {"type":"function","function":{"name":"GetPersonAge","description":"Gets the age of the specified person.","parameters":{"type":"object","required":["personName"],"properties":{"personName":{"description":"The person whose age is being requested","type":"string"}}}}},
+                  {"type":"function","function":{"name":"GetPersonAge","description":"Gets the age of the specified person.","parameters":{"type": "object","required": ["personName"],"properties": {"personName": {"description": "The person whose age is being requested","type": "string"}}}}}
+                  ],
+              "tool_choice":"auto"
             }
             """;
 
@@ -174,8 +187,8 @@ public class AzureAIInferenceChatClientTests
             Temperature = 0.5f,
             Seed = 42,
         };
-        azureAIOptions.StopSequences.Add("hello");
-        azureAIOptions.Tools.Add(ToAzureAIChatTool(tool));
+        azureAIOptions.StopSequences.Add("hello"); // this one merges with the other.
+        azureAIOptions.Tools.Add(ToAzureAIChatTool(tool)); // this one merges with the other.
         azureAIOptions.ToolChoice = ChatCompletionsToolChoice.Auto;
         azureAIOptions.ResponseFormat = ChatCompletionsResponseFormat.CreateTextFormat();
 

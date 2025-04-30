@@ -150,7 +150,7 @@ public class AzureAIInferenceChatClientTests
               "tools":[
                   {"type":"function","function":{"name":"GetPersonAge","description":"Gets the age of the specified person.","parameters":{"type":"object","required":["personName"],"properties":{"personName":{"description":"The person whose age is being requested","type":"string"}}}}},
                   {"type":"function","function":{"name":"GetPersonAge","description":"Gets the age of the specified person.","parameters":{"type": "object","required": ["personName"],"properties": {"personName": {"description": "The person whose age is being requested","type": "string"}}}}}
-                  ],
+                ],
               "tool_choice":"auto"
             }
             """;
@@ -230,7 +230,7 @@ public class AzureAIInferenceChatClientTests
               "tools":[
                   {"type":"function","function":{"name":"GetPersonAge","description":"Gets the age of the specified person.","parameters":{"type":"object","required":["personName"],"properties":{"personName":{"description":"The person whose age is being requested","type":"string"}}}}},
                   {"type":"function","function":{"name":"GetPersonAge","description":"Gets the age of the specified person.","parameters":{"type": "object","required": ["personName"],"properties": {"personName": {"description": "The person whose age is being requested","type": "string"}}}}}
-                  ],
+                ],
               "tool_choice":"auto",
               "stream":true
             }

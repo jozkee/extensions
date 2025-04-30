@@ -415,6 +415,7 @@ public class OpenAIChatClientTests
         ChatOptions chatOptions = new()
         {
             RawRepresentation = openAIOptions,
+            ModelId = null, // has no effect, you cannot change the model of an OpenAI's ChatClient.
             FrequencyPenalty = 0.1f,
             MaxOutputTokens = 1,
             TopP = 0.1f,
@@ -495,7 +496,7 @@ public class OpenAIChatClientTests
         ChatOptions chatOptions = new()
         {
             RawRepresentation = openAIOptions,
-            ModelId = "gpt-4o-mini",
+            ModelId = null, // has no effect, you cannot change the model of an OpenAI's ChatClient.
             FrequencyPenalty = 0.1f,
             MaxOutputTokens = 1,
             TopP = 0.1f,
@@ -511,6 +512,84 @@ public class OpenAIChatClientTests
         var response = await client.GetResponseAsync("hello", chatOptions);
         Assert.NotNull(response);
         Assert.Equal("Hello! How can I assist you today?", response.Text);
+    }
+
+    [Fact]
+    public async Task ChatOptions_Overwrite_NullPropertiesInRawRepresentation_Streaming()
+    {
+        const string Input = """
+            {
+              "messages":[{"role":"user","content":"hello"}],
+              "model":"gpt-4o-mini",
+              "frequency_penalty":0.1,
+              "max_completion_tokens":1,
+              "top_p":0.1,
+              "presence_penalty":0.1,
+              "temperature":0.1,
+              "seed":1,
+              "stop":["world"],
+              "response_format":{"type":"json_object"},
+              "tools":[
+                  {"type":"function","function":{"name":"GetPersonAge","description":"Gets the age of the specified person.","parameters":{"additionalProperties":false,"type":"object","required":["personName"],"properties":{"personName":{"description":"The person whose age is being requested","type":"string"}}}}}
+                ],
+              "tool_choice":"none",
+              "stream":true,
+              "stream_options":{"include_usage":true}
+            }
+            """;
+
+        const string Output = """
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","choices":[{"delta":{"role":"assistant","content":"Hello! "}}]}
+
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","choices":[{"delta":{"content":"How can I assist you today?"}}]}
+
+            data: {"id":"chatcmpl-123","object":"chat.completion.chunk","choices":[{"delta":{},"finish_reason":"stop"}]}
+
+            data: [DONE]
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateChatClient(httpClient, modelId: "gpt-4o-mini");
+        AIFunction tool = AIFunctionFactory.Create(([Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.");
+
+        ChatCompletionOptions openAIOptions = new();
+        Assert.Null(openAIOptions.FrequencyPenalty);
+        Assert.Null(openAIOptions.MaxOutputTokenCount);
+        Assert.Null(openAIOptions.TopP);
+        Assert.Null(openAIOptions.PresencePenalty);
+        Assert.Null(openAIOptions.Temperature);
+#pragma warning disable OPENAI001
+        Assert.Null(openAIOptions.Seed);
+#pragma warning restore OPENAI001
+        Assert.Empty(openAIOptions.StopSequences);
+        Assert.Empty(openAIOptions.Tools);
+        Assert.Null(openAIOptions.ToolChoice);
+        Assert.Null(openAIOptions.ResponseFormat);
+
+        ChatOptions chatOptions = new()
+        {
+            RawRepresentation = openAIOptions,
+            ModelId = null,
+            FrequencyPenalty = 0.1f,
+            MaxOutputTokens = 1,
+            TopP = 0.1f,
+            PresencePenalty = 0.1f,
+            Temperature = 0.1f,
+            Seed = 1,
+            StopSequences = ["world"],
+            Tools = [tool],
+            ToolMode = ChatToolMode.None,
+            ResponseFormat = ChatResponseFormat.Json
+        };
+
+        string responseText = string.Empty;
+        await foreach (var update in client.GetStreamingResponseAsync("hello", chatOptions))
+        {
+            responseText += update.Text;
+        }
+
+        Assert.Equal("Hello! How can I assist you today?", responseText);
     }
 
     /// <summary>Converts an Extensions function to an OpenAI chat tool.</summary>

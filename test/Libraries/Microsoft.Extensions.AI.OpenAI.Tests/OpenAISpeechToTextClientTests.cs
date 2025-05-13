@@ -211,11 +211,12 @@ public class OpenAISpeechToTextClientTests
     }
 
     [Fact]
-    public async Task GetTextAsync_NonStronglyTypedOptions_AllSent()
+    public async Task GetTextAsync_Transcription_StronglyTypedOptions_AllSent()
     {
         const string Input = """
                 {
                     "model": "whisper-1",
+                    "language": "pt",
                     "prompt":"Hide any bad words with ",
                     "temperature": 0.5,
                     "response_format": "vtt",
@@ -236,24 +237,28 @@ public class OpenAISpeechToTextClientTests
         using var audioSpeechStream = GetAudioStream();
         Assert.NotNull(await client.GetTextAsync(audioSpeechStream, new()
         {
-            AdditionalProperties = new()
+            SpeechLanguage = "en",
+            RawRepresentationFactory = (s) =>
+            new AudioTranscriptionOptions
             {
-                ["Prompt"] = "Hide any bad words with ",
-                ["SpeechLanguage"] = "pt",
-                ["Temperature"] = 0.5f,
-                ["TimestampGranularities"] = AudioTimestampGranularities.Segment | AudioTimestampGranularities.Word,
-                ["ResponseFormat"] = AudioTranscriptionFormat.Vtt,
-            },
+                Prompt = "Hide any bad words with ",
+                Language = "pt",
+                Temperature = 0.5f,
+                TimestampGranularities = AudioTimestampGranularities.Segment | AudioTimestampGranularities.Word,
+                ResponseFormat = AudioTranscriptionFormat.Vtt
+            }
         }));
     }
 
     [Fact]
-    public async Task GetTextAsync_StronglyTypedOptions_AllSent()
+    public async Task GetTextAsync_Translation_StronglyTypedOptions_AllSent()
     {
+        // Note: Temperature is ignored.
         const string Input = """
                 {
                     "model": "whisper-1",
-                    "language": "pt"
+                    "prompt":"Hide any bad words with ",
+                    "response_format": "vtt"
                 }
                 """;
 
@@ -270,7 +275,15 @@ public class OpenAISpeechToTextClientTests
         using var audioSpeechStream = GetAudioStream();
         Assert.NotNull(await client.GetTextAsync(audioSpeechStream, new()
         {
-            SpeechLanguage = "pt",
+            SpeechLanguage = null,
+            TextLanguage = "pt",
+            RawRepresentationFactory = (s) =>
+            new AudioTranslationOptions
+            {
+                Prompt = "Hide any bad words with ",
+                Temperature = 0.5f,
+                ResponseFormat = AudioTranslationFormat.Vtt
+            }
         }));
     }
 

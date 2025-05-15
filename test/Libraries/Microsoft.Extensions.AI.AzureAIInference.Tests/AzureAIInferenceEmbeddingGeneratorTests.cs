@@ -9,7 +9,7 @@ using Azure.AI.Inference;
 using Azure.Core.Pipeline;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
-using Xunit;
+using NUnit.Framework;
 
 #pragma warning disable S103 // Lines should not be too long
 
@@ -17,18 +17,20 @@ namespace Microsoft.Extensions.AI;
 
 public class AzureAIInferenceEmbeddingGeneratorTests
 {
-    [Fact]
+    [Test]
     public void AsIEmbeddingGenerator_InvalidArgs_Throws()
     {
-        Assert.Throws<ArgumentNullException>("embeddingsClient", () => ((EmbeddingsClient)null!).AsIEmbeddingGenerator());
+        var ex = Assert.Throws<ArgumentNullException>(() => ((EmbeddingsClient)null!).AsIEmbeddingGenerator());
+        Assert.That(ex!.ParamName, Is.EqualTo("embeddingsClient"));
 
         EmbeddingsClient client = new(new("http://somewhere"), new AzureKeyCredential("key"));
-        Assert.Throws<ArgumentException>("defaultModelId", () => client.AsIEmbeddingGenerator("   "));
+        var ex2 = Assert.Throws<ArgumentException>(() => client.AsIEmbeddingGenerator("   "));
+        Assert.That(ex2!.ParamName, Is.EqualTo("defaultModelId"));
 
         client.AsIEmbeddingGenerator(null);
     }
 
-    [Fact]
+    [Test]
     public void AsIEmbeddingGenerator_AzureAIClient_ProducesExpectedMetadata()
     {
         Uri endpoint = new("http://localhost/some/endpoint");
@@ -38,19 +40,19 @@ public class AzureAIInferenceEmbeddingGeneratorTests
 
         IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator = client.AsIEmbeddingGenerator(model);
         var metadata = embeddingGenerator.GetService<EmbeddingGeneratorMetadata>();
-        Assert.Equal("az.ai.inference", metadata?.ProviderName);
-        Assert.Equal(endpoint, metadata?.ProviderUri);
-        Assert.Equal(model, metadata?.DefaultModelId);
+        Assert.That(metadata?.ProviderName, Is.EqualTo("az.ai.inference"));
+        Assert.That(metadata?.ProviderUri, Is.EqualTo(endpoint));
+        Assert.That(metadata?.DefaultModelId, Is.EqualTo(model));
     }
 
-    [Fact]
+    [Test]
     public void GetService_SuccessfullyReturnsUnderlyingClient()
     {
         var client = new EmbeddingsClient(new("http://somewhere"), new AzureKeyCredential("key"));
         var embeddingGenerator = client.AsIEmbeddingGenerator("model");
 
-        Assert.Same(embeddingGenerator, embeddingGenerator.GetService<IEmbeddingGenerator<string, Embedding<float>>>());
-        Assert.Same(client, embeddingGenerator.GetService<EmbeddingsClient>());
+        Assert.That(embeddingGenerator, Is.SameAs(embeddingGenerator.GetService<IEmbeddingGenerator<string, Embedding<float>>>()));
+        Assert.That(embeddingGenerator.GetService<EmbeddingsClient>(), Is.SameAs(client));
 
         using IEmbeddingGenerator<string, Embedding<float>> pipeline = embeddingGenerator
             .AsBuilder()
@@ -58,15 +60,15 @@ public class AzureAIInferenceEmbeddingGeneratorTests
             .UseDistributedCache(new MemoryDistributedCache(Options.Options.Create(new MemoryDistributedCacheOptions())))
             .Build();
 
-        Assert.NotNull(pipeline.GetService<DistributedCachingEmbeddingGenerator<string, Embedding<float>>>());
-        Assert.NotNull(pipeline.GetService<CachingEmbeddingGenerator<string, Embedding<float>>>());
-        Assert.NotNull(pipeline.GetService<OpenTelemetryEmbeddingGenerator<string, Embedding<float>>>());
+        Assert.That(pipeline.GetService<DistributedCachingEmbeddingGenerator<string, Embedding<float>>>(), Is.Not.Null);
+        Assert.That(pipeline.GetService<CachingEmbeddingGenerator<string, Embedding<float>>>(), Is.Not.Null);
+        Assert.That(pipeline.GetService<OpenTelemetryEmbeddingGenerator<string, Embedding<float>>>(), Is.Not.Null);
 
-        Assert.Same(client, pipeline.GetService<EmbeddingsClient>());
-        Assert.IsType<OpenTelemetryEmbeddingGenerator<string, Embedding<float>>>(pipeline.GetService<IEmbeddingGenerator<string, Embedding<float>>>());
+        Assert.That(pipeline.GetService<EmbeddingsClient>(), Is.SameAs(client));
+        Assert.That(pipeline.GetService<IEmbeddingGenerator<string, Embedding<float>>>(), Is.TypeOf<OpenTelemetryEmbeddingGenerator<string, Embedding<float>>>());
     }
 
-    [Fact]
+    [Test]
     public async Task GenerateAsync_ExpectedRequestResponse()
     {
         const string Input = """
@@ -107,23 +109,23 @@ public class AzureAIInferenceEmbeddingGeneratorTests
             "hello, world!",
             "red, white, blue",
         ]);
-        Assert.NotNull(response);
-        Assert.Equal(2, response.Count);
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response.Count, Is.EqualTo(2));
 
-        Assert.NotNull(response.Usage);
-        Assert.Equal(9, response.Usage.InputTokenCount);
-        Assert.Equal(9, response.Usage.TotalTokenCount);
+        Assert.That(response.Usage, Is.Not.Null);
+        Assert.That(response.Usage!.InputTokenCount, Is.EqualTo(9));
+        Assert.That(response.Usage.TotalTokenCount, Is.EqualTo(9));
 
         foreach (Embedding<float> e in response)
         {
-            Assert.Equal("text-embedding-3-small", e.ModelId);
-            Assert.NotNull(e.CreatedAt);
-            Assert.Equal(1536, e.Vector.Length);
-            Assert.Contains(e.Vector.ToArray(), f => !f.Equals(0));
+            Assert.That(e.ModelId, Is.EqualTo("text-embedding-3-small"));
+            Assert.That(e.CreatedAt, Is.Not.Null);
+            Assert.That(e.Vector.Length, Is.EqualTo(1536));
+            Assert.That(e.Vector.ToArray(), Has.Some.Not.EqualTo(0f));
         }
     }
 
-    [Fact]
+    [Test]
     public async Task EmbeddingGenerationOptions_DoNotOverwrite_NotNullPropertiesInRawRepresentation()
     {
         const string Input = """
@@ -175,14 +177,14 @@ public class AzureAIInferenceEmbeddingGeneratorTests
             }
         });
 
-        Assert.NotNull(response);
+        Assert.That(response, Is.Not.Null);
 
         foreach (Embedding<float> e in response)
         {
-            Assert.Equal("text-embedding-3-small", e.ModelId);
-            Assert.NotNull(e.CreatedAt);
-            Assert.Equal(1536, e.Vector.Length);
-            Assert.Contains(e.Vector.ToArray(), f => !f.Equals(0));
+            Assert.That(e.ModelId, Is.EqualTo("text-embedding-3-small"));
+            Assert.That(e.CreatedAt, Is.Not.Null);
+            Assert.That(e.Vector.Length, Is.EqualTo(1536));
+            Assert.That(e.Vector.ToArray(), Has.Some.Not.EqualTo(0f));
         }
     }
 }

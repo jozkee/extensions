@@ -14,7 +14,7 @@ using Azure.AI.Inference;
 using Azure.Core.Pipeline;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
-using Xunit;
+using NUnit.Framework;
 
 #pragma warning disable S103 // Lines should not be too long
 #pragma warning disable S3358 // Ternary operators should not be nested
@@ -24,29 +24,31 @@ namespace Microsoft.Extensions.AI;
 
 public class AzureAIInferenceChatClientTests
 {
-    [Fact]
+    [Test]
     public void AsIChatClient_InvalidArgs_Throws()
     {
-        Assert.Throws<ArgumentNullException>("chatCompletionsClient", () => ((ChatCompletionsClient)null!).AsIChatClient("model"));
+        var ex1 = Assert.Throws<ArgumentNullException>(() => ((ChatCompletionsClient)null!).AsIChatClient("model"));
+        Assert.That(ex1!.ParamName, Is.EqualTo("chatCompletionsClient"));
 
         ChatCompletionsClient client = new(new("http://somewhere"), new AzureKeyCredential("key"));
-        Assert.Throws<ArgumentException>("defaultModelId", () => client.AsIChatClient("   "));
+        var ex2 = Assert.Throws<ArgumentException>(() => client.AsIChatClient("   "));
+        Assert.That(ex2!.ParamName, Is.EqualTo("defaultModelId"));
     }
 
-    [Fact]
-    public async Task NullModel_Throws()
+    [Test]
+    public void NullModel_Throws()
     {
         ChatCompletionsClient client = new(new("http://localhost/some/endpoint"), new AzureKeyCredential("key"));
         IChatClient chatClient = client.AsIChatClient(modelId: null);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => chatClient.GetResponseAsync("hello"));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => chatClient.GetStreamingResponseAsync("hello").GetAsyncEnumerator().MoveNextAsync().AsTask());
+        Assert.ThrowsAsync<InvalidOperationException>(() => chatClient.GetResponseAsync("hello"));
+        Assert.ThrowsAsync<InvalidOperationException>(() => chatClient.GetStreamingResponseAsync("hello").GetAsyncEnumerator().MoveNextAsync().AsTask());
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => chatClient.GetResponseAsync("hello", new ChatOptions { ModelId = null }));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => chatClient.GetStreamingResponseAsync("hello", new ChatOptions { ModelId = null }).GetAsyncEnumerator().MoveNextAsync().AsTask());
+        Assert.ThrowsAsync<InvalidOperationException>(() => chatClient.GetResponseAsync("hello", new ChatOptions { ModelId = null }));
+        Assert.ThrowsAsync<InvalidOperationException>(() => chatClient.GetStreamingResponseAsync("hello", new ChatOptions { ModelId = null }).GetAsyncEnumerator().MoveNextAsync().AsTask());
     }
 
-    [Fact]
+    [Test]
     public void AsIChatClient_ProducesExpectedMetadata()
     {
         Uri endpoint = new("http://localhost/some/endpoint");
@@ -56,19 +58,19 @@ public class AzureAIInferenceChatClientTests
 
         IChatClient chatClient = client.AsIChatClient(model);
         var metadata = chatClient.GetService<ChatClientMetadata>();
-        Assert.Equal("az.ai.inference", metadata?.ProviderName);
-        Assert.Equal(endpoint, metadata?.ProviderUri);
-        Assert.Equal(model, metadata?.DefaultModelId);
+        Assert.That(metadata?.ProviderName, Is.EqualTo("az.ai.inference"));
+        Assert.That(metadata?.ProviderUri, Is.EqualTo(endpoint));
+        Assert.That(metadata?.DefaultModelId, Is.EqualTo(model));
     }
 
-    [Fact]
+    [Test]
     public void GetService_SuccessfullyReturnsUnderlyingClient()
     {
         ChatCompletionsClient client = new(new("http://localhost"), new AzureKeyCredential("key"));
         IChatClient chatClient = client.AsIChatClient("model");
 
-        Assert.Same(chatClient, chatClient.GetService<IChatClient>());
-        Assert.Same(client, chatClient.GetService<ChatCompletionsClient>());
+        Assert.That(chatClient.GetService<IChatClient>(), Is.SameAs(chatClient));
+        Assert.That(chatClient.GetService<ChatCompletionsClient>(), Is.SameAs(client));
 
         using IChatClient pipeline = chatClient
             .AsBuilder()
@@ -77,17 +79,17 @@ public class AzureAIInferenceChatClientTests
             .UseDistributedCache(new MemoryDistributedCache(Options.Options.Create(new MemoryDistributedCacheOptions())))
             .Build();
 
-        Assert.NotNull(pipeline.GetService<FunctionInvokingChatClient>());
-        Assert.NotNull(pipeline.GetService<DistributedCachingChatClient>());
-        Assert.NotNull(pipeline.GetService<CachingChatClient>());
-        Assert.NotNull(pipeline.GetService<OpenTelemetryChatClient>());
-        Assert.NotNull(pipeline.GetService<object>());
+        Assert.That(pipeline.GetService<FunctionInvokingChatClient>(), Is.Not.Null);
+        Assert.That(pipeline.GetService<DistributedCachingChatClient>(), Is.Not.Null);
+        Assert.That(pipeline.GetService<CachingChatClient>(), Is.Not.Null);
+        Assert.That(pipeline.GetService<OpenTelemetryChatClient>(), Is.Not.Null);
+        Assert.That(pipeline.GetService<object>(), Is.Not.Null);
 
-        Assert.Same(client, pipeline.GetService<ChatCompletionsClient>());
-        Assert.IsType<FunctionInvokingChatClient>(pipeline.GetService<IChatClient>());
+        Assert.That(pipeline.GetService<ChatCompletionsClient>(), Is.SameAs(client));
+        Assert.That(pipeline.GetService<IChatClient>(), Is.InstanceOf<FunctionInvokingChatClient>());
 
-        Assert.Null(pipeline.GetService<ChatCompletionsClient>("key"));
-        Assert.Null(pipeline.GetService<string>("key"));
+        Assert.That(pipeline.GetService<ChatCompletionsClient>("key"), Is.Null);
+        Assert.That(pipeline.GetService<string>("key"), Is.Null);
     }
 
     private const string BasicInputNonStreaming = """
@@ -132,9 +134,8 @@ public class AzureAIInferenceChatClientTests
         }
         """;
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [TestCase(false)]
+    [TestCase(true)]
     public async Task BasicRequestResponse_NonStreaming(bool multiContent)
     {
         using VerbatimHttpHandler handler = new(BasicInputNonStreaming, BasicOutputNonStreaming);
@@ -150,21 +151,21 @@ public class AzureAIInferenceChatClientTests
             MaxOutputTokens = 10,
             Temperature = 0.5f,
         });
-        Assert.NotNull(response);
+        Assert.That(response, Is.Not.Null);
 
-        Assert.Equal("chatcmpl-ADx3PvAnCwJg0woha4pYsBTi3ZpOI", response.ResponseId);
-        Assert.Equal("Hello! How can I assist you today?", response.Text);
-        Assert.Single(response.Messages.Single().Contents);
-        Assert.Equal(ChatRole.Assistant, response.Messages.Single().Role);
-        Assert.Equal("chatcmpl-ADx3PvAnCwJg0woha4pYsBTi3ZpOI", response.Messages.Single().MessageId);
-        Assert.Equal("gpt-4o-mini-2024-07-18", response.ModelId);
-        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1_727_888_631), response.CreatedAt);
-        Assert.Equal(ChatFinishReason.Stop, response.FinishReason);
+        Assert.That(response.ResponseId, Is.EqualTo("chatcmpl-ADx3PvAnCwJg0woha4pYsBTi3ZpOI"));
+        Assert.That(response.Text, Is.EqualTo("Hello! How can I assist you today?"));
+        Assert.That(response.Messages.Single().Contents, Has.Count.EqualTo(1));
+        Assert.That(response.Messages.Single().Role, Is.EqualTo(ChatRole.Assistant));
+        Assert.That(response.Messages.Single().MessageId, Is.EqualTo("chatcmpl-ADx3PvAnCwJg0woha4pYsBTi3ZpOI"));
+        Assert.That(response.ModelId, Is.EqualTo("gpt-4o-mini-2024-07-18"));
+        Assert.That(response.CreatedAt, Is.EqualTo(DateTimeOffset.FromUnixTimeSeconds(1_727_888_631)));
+        Assert.That(response.FinishReason, Is.EqualTo(ChatFinishReason.Stop));
 
-        Assert.NotNull(response.Usage);
-        Assert.Equal(8, response.Usage.InputTokenCount);
-        Assert.Equal(9, response.Usage.OutputTokenCount);
-        Assert.Equal(17, response.Usage.TotalTokenCount);
+        Assert.That(response.Usage, Is.Not.Null);
+        Assert.That(response.Usage!.InputTokenCount, Is.EqualTo(8));
+        Assert.That(response.Usage.OutputTokenCount, Is.EqualTo(9));
+        Assert.That(response.Usage.TotalTokenCount, Is.EqualTo(17));
     }
 
     private const string BasicInputStreaming = """
@@ -205,9 +206,8 @@ public class AzureAIInferenceChatClientTests
 
         """;
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [TestCase(false)]
+    [TestCase(true)]
     public async Task BasicRequestResponse_Streaming(bool multiContent)
     {
         using VerbatimHttpHandler handler = new(BasicInputStreaming, BasicOutputStreaming);
@@ -228,23 +228,23 @@ public class AzureAIInferenceChatClientTests
             updates.Add(update);
         }
 
-        Assert.Equal("Hello! How can I assist you today?", string.Concat(updates.Select(u => u.Text)));
+        Assert.That(string.Concat(updates.Select(u => u.Text)), Is.EqualTo("Hello! How can I assist you today?"));
 
         var createdAt = DateTimeOffset.FromUnixTimeSeconds(1_727_889_370);
-        Assert.Equal(12, updates.Count);
+        Assert.That(updates.Count, Is.EqualTo(12));
         for (int i = 0; i < updates.Count; i++)
         {
-            Assert.Equal("chatcmpl-ADxFKtX6xIwdWRN42QvBj2u1RZpCK", updates[i].ResponseId);
-            Assert.Equal("chatcmpl-ADxFKtX6xIwdWRN42QvBj2u1RZpCK", updates[i].MessageId);
-            Assert.Equal(createdAt, updates[i].CreatedAt);
-            Assert.Equal("gpt-4o-mini-2024-07-18", updates[i].ModelId);
-            Assert.Equal(ChatRole.Assistant, updates[i].Role);
-            Assert.Equal(i is < 10 or 11 ? 1 : 0, updates[i].Contents.Count);
-            Assert.Equal(i < 10 ? null : ChatFinishReason.Stop, updates[i].FinishReason);
+            Assert.That(updates[i].ResponseId, Is.EqualTo("chatcmpl-ADxFKtX6xIwdWRN42QvBj2u1RZpCK"));
+            Assert.That(updates[i].MessageId, Is.EqualTo("chatcmpl-ADxFKtX6xIwdWRN42QvBj2u1RZpCK"));
+            Assert.That(updates[i].CreatedAt, Is.EqualTo(createdAt));
+            Assert.That(updates[i].ModelId, Is.EqualTo("gpt-4o-mini-2024-07-18"));
+            Assert.That(updates[i].Role, Is.EqualTo(ChatRole.Assistant));
+            Assert.That(updates[i].Contents.Count, Is.EqualTo(i is < 10 or 11 ? 1 : 0));
+            Assert.That(updates[i].FinishReason, Is.EqualTo(i < 10 ? null : ChatFinishReason.Stop));
         }
     }
 
-    [Fact]
+    [Test]
     public async Task IChatClient_WithNullModel_ChatOptions_WithNotNullModel_NonStreaming()
     {
         using VerbatimHttpHandler handler = new(BasicInputNonStreaming, BasicOutputNonStreaming);
@@ -257,11 +257,11 @@ public class AzureAIInferenceChatClientTests
             MaxOutputTokens = 10,
             Temperature = 0.5f,
         });
-        Assert.NotNull(response);
-        Assert.Equal("Hello! How can I assist you today?", response.Text);
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response.Text, Is.EqualTo("Hello! How can I assist you today?"));
     }
 
-    [Fact]
+    [Test]
     public async Task IChatClient_WithNullModel_ChatOptions_WithNotNullModel_Streaming()
     {
         using VerbatimHttpHandler handler = new(BasicInputStreaming, BasicOutputStreaming);
@@ -279,10 +279,10 @@ public class AzureAIInferenceChatClientTests
             responseText += update.Text;
         }
 
-        Assert.Equal("Hello! How can I assist you today?", responseText);
+        Assert.That(responseText, Is.EqualTo("Hello! How can I assist you today?"));
     }
 
-    [Fact]
+    [Test]
     public async Task ChatOptions_DoNotOverwrite_NotNullPropertiesInRawRepresentation_NonStreaming()
     {
         const string Input = """
@@ -325,7 +325,7 @@ public class AzureAIInferenceChatClientTests
         using VerbatimHttpHandler handler = new(Input, Output);
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, modelId: null!);
-        AIFunction tool = AIFunctionFactory.Create(([Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.");
+        AIFunction tool = AIFunctionFactory.Create(([System.ComponentModel.Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.");
 
         ChatOptions chatOptions = new ChatOptions
         {
@@ -366,11 +366,11 @@ public class AzureAIInferenceChatClientTests
         };
 
         var response = await client.GetResponseAsync("hello", chatOptions);
-        Assert.NotNull(response);
-        Assert.Equal("Hello! How can I assist you today?", response.Text);
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response.Text, Is.EqualTo("Hello! How can I assist you today?"));
     }
 
-    [Fact]
+    [Test]
     public async Task ChatOptions_DoNotOverwrite_NotNullPropertiesInRawRepresentation_Streaming()
     {
         const string Input = """
@@ -409,7 +409,7 @@ public class AzureAIInferenceChatClientTests
         using VerbatimHttpHandler handler = new(Input, Output);
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, modelId: null!);
-        AIFunction tool = AIFunctionFactory.Create(([Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.");
+        AIFunction tool = AIFunctionFactory.Create(([System.ComponentModel.Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.");
 
         ChatOptions chatOptions = new ChatOptions
         {
@@ -455,10 +455,10 @@ public class AzureAIInferenceChatClientTests
             responseText += update.Text;
         }
 
-        Assert.Equal("Hello! How can I assist you today?", responseText);
+        Assert.That(responseText, Is.EqualTo("Hello! How can I assist you today?"));
     }
 
-    [Fact]
+    [Test]
     public async Task ChatOptions_Overwrite_NullPropertiesInRawRepresentation_NonStreaming()
     {
         const string Input = """
@@ -498,25 +498,25 @@ public class AzureAIInferenceChatClientTests
         using VerbatimHttpHandler handler = new(Input, Output);
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, modelId: null!);
-        AIFunction tool = AIFunctionFactory.Create(([Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.");
+        AIFunction tool = AIFunctionFactory.Create(([System.ComponentModel.Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.");
 
         ChatOptions chatOptions = new ChatOptions
         {
             RawRepresentationFactory = (c) =>
             {
                 ChatCompletionsOptions azureAIOptions = new();
-                Assert.Empty(azureAIOptions.Messages);
-                Assert.Null(azureAIOptions.Model);
-                Assert.Null(azureAIOptions.FrequencyPenalty);
-                Assert.Null(azureAIOptions.MaxTokens);
-                Assert.Null(azureAIOptions.NucleusSamplingFactor);
-                Assert.Null(azureAIOptions.PresencePenalty);
-                Assert.Null(azureAIOptions.Temperature);
-                Assert.Null(azureAIOptions.Seed);
-                Assert.Empty(azureAIOptions.StopSequences);
-                Assert.Empty(azureAIOptions.Tools);
-                Assert.Null(azureAIOptions.ToolChoice);
-                Assert.Null(azureAIOptions.ResponseFormat);
+                Assert.That(azureAIOptions.Messages, Is.Empty);
+                Assert.That(azureAIOptions.Model, Is.Null);
+                Assert.That(azureAIOptions.FrequencyPenalty, Is.Null);
+                Assert.That(azureAIOptions.MaxTokens, Is.Null);
+                Assert.That(azureAIOptions.NucleusSamplingFactor, Is.Null);
+                Assert.That(azureAIOptions.PresencePenalty, Is.Null);
+                Assert.That(azureAIOptions.Temperature, Is.Null);
+                Assert.That(azureAIOptions.Seed, Is.Null);
+                Assert.That(azureAIOptions.StopSequences, Is.Empty);
+                Assert.That(azureAIOptions.Tools, Is.Empty);
+                Assert.That(azureAIOptions.ToolChoice, Is.Null);
+                Assert.That(azureAIOptions.ResponseFormat, Is.Null);
                 return azureAIOptions;
             },
             ModelId = "gpt-4o-mini",
@@ -533,11 +533,11 @@ public class AzureAIInferenceChatClientTests
         };
 
         var response = await client.GetResponseAsync("hello", chatOptions);
-        Assert.NotNull(response);
-        Assert.Equal("Hello! How can I assist you today?", response.Text);
+        Assert.That(response, Is.Not.Null);
+        Assert.That(response.Text, Is.EqualTo("Hello! How can I assist you today?"));
     }
 
-    [Fact]
+    [Test]
     public async Task ChatOptions_Overwrite_NullPropertiesInRawRepresentation_Streaming()
     {
         const string Input = """
@@ -573,25 +573,25 @@ public class AzureAIInferenceChatClientTests
         using VerbatimHttpHandler handler = new(Input, Output);
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, modelId: null!);
-        AIFunction tool = AIFunctionFactory.Create(([Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.");
+        AIFunction tool = AIFunctionFactory.Create(([System.ComponentModel.Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.");
 
         ChatOptions chatOptions = new ChatOptions
         {
             RawRepresentationFactory = (c) =>
             {
                 ChatCompletionsOptions azureAIOptions = new();
-                Assert.Empty(azureAIOptions.Messages);
-                Assert.Null(azureAIOptions.Model);
-                Assert.Null(azureAIOptions.FrequencyPenalty);
-                Assert.Null(azureAIOptions.MaxTokens);
-                Assert.Null(azureAIOptions.NucleusSamplingFactor);
-                Assert.Null(azureAIOptions.PresencePenalty);
-                Assert.Null(azureAIOptions.Temperature);
-                Assert.Null(azureAIOptions.Seed);
-                Assert.Empty(azureAIOptions.StopSequences);
-                Assert.Empty(azureAIOptions.Tools);
-                Assert.Null(azureAIOptions.ToolChoice);
-                Assert.Null(azureAIOptions.ResponseFormat);
+                Assert.That(azureAIOptions.Messages, Is.Empty);
+                Assert.That(azureAIOptions.Model, Is.Null);
+                Assert.That(azureAIOptions.FrequencyPenalty, Is.Null);
+                Assert.That(azureAIOptions.MaxTokens, Is.Null);
+                Assert.That(azureAIOptions.NucleusSamplingFactor, Is.Null);
+                Assert.That(azureAIOptions.PresencePenalty, Is.Null);
+                Assert.That(azureAIOptions.Temperature, Is.Null);
+                Assert.That(azureAIOptions.Seed, Is.Null);
+                Assert.That(azureAIOptions.StopSequences, Is.Empty);
+                Assert.That(azureAIOptions.Tools, Is.Empty);
+                Assert.That(azureAIOptions.ToolChoice, Is.Null);
+                Assert.That(azureAIOptions.ResponseFormat, Is.Null);
                 return azureAIOptions;
             },
             ModelId = "gpt-4o-mini",
@@ -613,7 +613,7 @@ public class AzureAIInferenceChatClientTests
             responseText += update.Text;
         }
 
-        Assert.Equal("Hello! How can I assist you today?", responseText);
+        Assert.That(responseText, Is.EqualTo("Hello! How can I assist you today?"));
     }
 
     /// <summary>Converts an Extensions function to an AzureAI chat tool.</summary>
@@ -642,7 +642,7 @@ public class AzureAIInferenceChatClientTests
         public Dictionary<string, JsonElement> Properties { get; set; } = [];
     }
 
-    [Fact]
+    [Test]
     public async Task AdditionalOptions_NonStreaming()
     {
         const string Input = """
@@ -681,7 +681,7 @@ public class AzureAIInferenceChatClientTests
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, "gpt-4o-mini");
 
-        Assert.NotNull(await client.GetResponseAsync("hello", new()
+        Assert.That(await client.GetResponseAsync("hello", new()
         {
             MaxOutputTokens = 10,
             Temperature = 0.5f,
@@ -698,10 +698,10 @@ public class AzureAIInferenceChatClientTests
                 azureAIOptions.AdditionalProperties.Add("and_something_further", new BinaryData(JsonSerializer.SerializeToUtf8Bytes(123, typeof(object))));
                 return azureAIOptions;
             },
-        }));
+        }), Is.Not.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task TopK_DoNotOverwrite_NonStreaming()
     {
         const string Input = """
@@ -740,7 +740,7 @@ public class AzureAIInferenceChatClientTests
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, "gpt-4o-mini");
 
-        Assert.NotNull(await client.GetResponseAsync("hello", new()
+        Assert.That(await client.GetResponseAsync("hello", new()
         {
             MaxOutputTokens = 10,
             Temperature = 0.5f,
@@ -758,10 +758,10 @@ public class AzureAIInferenceChatClientTests
                 azureAIOptions.AdditionalProperties.Add("and_something_further", new BinaryData(JsonSerializer.SerializeToUtf8Bytes(123, typeof(object))));
                 return azureAIOptions;
             },
-        }));
+        }), Is.Not.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task ResponseFormat_Text_NonStreaming()
     {
         const string Input = """
@@ -791,13 +791,13 @@ public class AzureAIInferenceChatClientTests
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, "gpt-4o-mini");
 
-        Assert.NotNull(await client.GetResponseAsync("hello", new()
+        Assert.That(await client.GetResponseAsync("hello", new()
         {
             ResponseFormat = ChatResponseFormat.Text,
-        }));
+        }), Is.Not.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task ResponseFormat_Json_NonStreaming()
     {
         const string Input = """
@@ -827,13 +827,13 @@ public class AzureAIInferenceChatClientTests
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, "gpt-4o-mini");
 
-        Assert.NotNull(await client.GetResponseAsync("hello", new()
+        Assert.That(await client.GetResponseAsync("hello", new()
         {
             ResponseFormat = ChatResponseFormat.Json,
-        }));
+        }), Is.Not.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task ResponseFormat_JsonSchema_NonStreaming()
     {
         const string Input = """
@@ -884,7 +884,7 @@ public class AzureAIInferenceChatClientTests
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, "gpt-4o-mini");
 
-        Assert.NotNull(await client.GetResponseAsync("hello", new()
+        Assert.That(await client.GetResponseAsync("hello", new()
         {
             ResponseFormat = ChatResponseFormat.ForJsonSchema(JsonSerializer.Deserialize<JsonElement>("""
                 {
@@ -897,10 +897,10 @@ public class AzureAIInferenceChatClientTests
                   "required": ["description"]
                 }
                 """), "DescribedObject", "An object with a description"),
-        }));
+        }), Is.Not.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task MultipleMessages_NonStreaming()
     {
         const string Input = """
@@ -955,7 +955,7 @@ public class AzureAIInferenceChatClientTests
                   "index": 0,
                   "message": {
                     "role": "assistant",
-                    "content": "I’m doing well, thank you! What’s on your mind today?",
+                    "content": "I'm doing well, thank you! What's on your mind today?",
                     "refusal": null
                   },
                   "logprobs": null,
@@ -999,24 +999,24 @@ public class AzureAIInferenceChatClientTests
             StopSequences = ["great"],
             Seed = 42,
         });
-        Assert.NotNull(response);
+        Assert.That(response, Is.Not.Null);
 
-        Assert.Equal("chatcmpl-ADyV17bXeSm5rzUx3n46O7m3M0o3P", response.ResponseId);
-        Assert.Equal("I’m doing well, thank you! What’s on your mind today?", response.Text);
-        Assert.Single(response.Messages.Single().Contents);
-        Assert.Equal(ChatRole.Assistant, response.Messages.Single().Role);
-        Assert.Equal("chatcmpl-ADyV17bXeSm5rzUx3n46O7m3M0o3P", response.Messages.Single().MessageId);
-        Assert.Equal("gpt-4o-mini-2024-07-18", response.ModelId);
-        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1_727_894_187), response.CreatedAt);
-        Assert.Equal(ChatFinishReason.Stop, response.FinishReason);
+        Assert.That(response.ResponseId, Is.EqualTo("chatcmpl-ADyV17bXeSm5rzUx3n46O7m3M0o3P"));
+        Assert.That(response.Text, Is.EqualTo("I'm doing well, thank you! What's on your mind today?"));
+        Assert.That(response.Messages.Single().Contents, Has.Count.EqualTo(1));
+        Assert.That(response.Messages.Single().Role, Is.EqualTo(ChatRole.Assistant));
+        Assert.That(response.Messages.Single().MessageId, Is.EqualTo("chatcmpl-ADyV17bXeSm5rzUx3n46O7m3M0o3P"));
+        Assert.That(response.ModelId, Is.EqualTo("gpt-4o-mini-2024-07-18"));
+        Assert.That(response.CreatedAt, Is.EqualTo(DateTimeOffset.FromUnixTimeSeconds(1_727_894_187)));
+        Assert.That(response.FinishReason, Is.EqualTo(ChatFinishReason.Stop));
 
-        Assert.NotNull(response.Usage);
-        Assert.Equal(42, response.Usage.InputTokenCount);
-        Assert.Equal(15, response.Usage.OutputTokenCount);
-        Assert.Equal(57, response.Usage.TotalTokenCount);
+        Assert.That(response.Usage, Is.Not.Null);
+        Assert.That(response.Usage!.InputTokenCount, Is.EqualTo(42));
+        Assert.That(response.Usage.OutputTokenCount, Is.EqualTo(15));
+        Assert.That(response.Usage.TotalTokenCount, Is.EqualTo(57));
     }
 
-    [Fact]
+    [Test]
     public async Task MultipleContent_NonStreaming()
     {
         const string Input = """
@@ -1064,14 +1064,14 @@ public class AzureAIInferenceChatClientTests
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, "gpt-4o-mini");
 
-        Assert.NotNull(await client.GetResponseAsync([new(ChatRole.User,
+        Assert.That(await client.GetResponseAsync([new(ChatRole.User,
         [
             new TextContent("Describe this picture."),
             new UriContent("http://dot.net/someimage.png", mediaType: "image/*"),
-        ])]));
+        ])]), Is.Not.Null);
     }
 
-    [Fact]
+    [Test]
     public async Task NullAssistantText_ContentEmpty_NonStreaming()
     {
         const string Input = """
@@ -1134,32 +1134,31 @@ public class AzureAIInferenceChatClientTests
         ];
 
         var response = await client.GetResponseAsync(messages);
-        Assert.NotNull(response);
+        Assert.That(response, Is.Not.Null);
 
-        Assert.Equal("chatcmpl-ADyV17bXeSm5rzUx3n46O7m3M0o3P", response.ResponseId);
-        Assert.Equal("Hello.", response.Text);
-        Assert.Single(response.Messages.Single().Contents);
-        Assert.Equal(ChatRole.Assistant, response.Messages.Single().Role);
-        Assert.Equal("gpt-4o-mini-2024-07-18", response.ModelId);
-        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1_727_894_187), response.CreatedAt);
-        Assert.Equal(ChatFinishReason.Stop, response.FinishReason);
+        Assert.That(response.ResponseId, Is.EqualTo("chatcmpl-ADyV17bXeSm5rzUx3n46O7m3M0o3P"));
+        Assert.That(response.Text, Is.EqualTo("Hello."));
+        Assert.That(response.Messages.Single().Contents, Has.Count.EqualTo(1));
+        Assert.That(response.Messages.Single().Role, Is.EqualTo(ChatRole.Assistant));
+        Assert.That(response.ModelId, Is.EqualTo("gpt-4o-mini-2024-07-18"));
+        Assert.That(response.CreatedAt, Is.EqualTo(DateTimeOffset.FromUnixTimeSeconds(1_727_894_187)));
+        Assert.That(response.FinishReason, Is.EqualTo(ChatFinishReason.Stop));
 
-        Assert.NotNull(response.Usage);
-        Assert.Equal(42, response.Usage.InputTokenCount);
-        Assert.Equal(15, response.Usage.OutputTokenCount);
-        Assert.Equal(57, response.Usage.TotalTokenCount);
+        Assert.That(response.Usage, Is.Not.Null);
+        Assert.That(response.Usage!.InputTokenCount, Is.EqualTo(42));
+        Assert.That(response.Usage.OutputTokenCount, Is.EqualTo(15));
+        Assert.That(response.Usage.TotalTokenCount, Is.EqualTo(57));
     }
 
     public static IEnumerable<object[]> FunctionCallContent_NonStreaming_MemberData()
     {
-        yield return [ChatToolMode.Auto];
-        yield return [ChatToolMode.None];
-        yield return [ChatToolMode.RequireAny];
-        yield return [ChatToolMode.RequireSpecific("GetPersonAge")];
+        yield return new object[] { ChatToolMode.Auto };
+        yield return new object[] { ChatToolMode.None };
+        yield return new object[] { ChatToolMode.RequireAny };
+        yield return new object[] { ChatToolMode.RequireSpecific("GetPersonAge") };
     }
 
-    [Theory]
-    [MemberData(nameof(FunctionCallContent_NonStreaming_MemberData))]
+    [TestCaseSource(nameof(FunctionCallContent_NonStreaming_MemberData))]
     public async Task FunctionCallContent_NonStreaming(ChatToolMode mode)
     {
         string input = $$"""
@@ -1248,28 +1247,31 @@ public class AzureAIInferenceChatClientTests
 
         var response = await client.GetResponseAsync("How old is Alice?", new()
         {
-            Tools = [AIFunctionFactory.Create(([Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.")],
+            Tools = [AIFunctionFactory.Create(([System.ComponentModel.Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.")],
             ToolMode = mode,
         });
-        Assert.NotNull(response);
+        Assert.That(response, Is.Not.Null);
 
-        Assert.Empty(response.Text);
-        Assert.Equal("gpt-4o-mini-2024-07-18", response.ModelId);
-        Assert.Equal(ChatRole.Assistant, response.Messages.Single().Role);
-        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1_727_894_702), response.CreatedAt);
-        Assert.Equal(ChatFinishReason.ToolCalls, response.FinishReason);
-        Assert.NotNull(response.Usage);
-        Assert.Equal(61, response.Usage.InputTokenCount);
-        Assert.Equal(16, response.Usage.OutputTokenCount);
-        Assert.Equal(77, response.Usage.TotalTokenCount);
+        Assert.That(response.Text, Is.Empty);
+        Assert.That(response.ModelId, Is.EqualTo("gpt-4o-mini-2024-07-18"));
+        Assert.That(response.Messages.Single().Role, Is.EqualTo(ChatRole.Assistant));
+        Assert.That(response.CreatedAt, Is.EqualTo(DateTimeOffset.FromUnixTimeSeconds(1_727_894_702)));
+        Assert.That(response.FinishReason, Is.EqualTo(ChatFinishReason.ToolCalls));
+        Assert.That(response.Usage, Is.Not.Null);
+        Assert.That(response.Usage!.InputTokenCount, Is.EqualTo(61));
+        Assert.That(response.Usage.OutputTokenCount, Is.EqualTo(16));
+        Assert.That(response.Usage.TotalTokenCount, Is.EqualTo(77));
 
-        Assert.Single(response.Messages.Single().Contents);
-        FunctionCallContent fcc = Assert.IsType<FunctionCallContent>(response.Messages.Single().Contents[0]);
-        Assert.Equal("GetPersonAge", fcc.Name);
+        Assert.That(response.Messages.Single().Contents, Has.Count.EqualTo(1));
+
+        var aiContent = response.Messages.Single().Contents[0];
+        Assert.That(aiContent, Is.InstanceOf<FunctionCallContent>());
+        var fcc = (FunctionCallContent)aiContent;
+        Assert.That(fcc.Name, Is.EqualTo("GetPersonAge"));
         AssertExtensions.EqualFunctionCallParameters(new Dictionary<string, object?> { ["personName"] = "Alice" }, fcc.Arguments);
     }
 
-    [Fact]
+    [Test]
     public async Task FunctionCallContent_Streaming()
     {
         const string Input = """
@@ -1335,29 +1337,33 @@ public class AzureAIInferenceChatClientTests
         List<ChatResponseUpdate> updates = [];
         await foreach (var update in client.GetStreamingResponseAsync("How old is Alice?", new()
         {
-            Tools = [AIFunctionFactory.Create(([Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.")],
+            Tools = [AIFunctionFactory.Create(([System.ComponentModel.Description("The person whose age is being requested")] string personName) => 42, "GetPersonAge", "Gets the age of the specified person.")],
         }))
         {
             updates.Add(update);
         }
 
-        Assert.Equal("", string.Concat(updates.Select(u => u.Text)));
+        Assert.That(string.Concat(updates.Select(u => u.Text)), Is.EqualTo(""));
 
         var createdAt = DateTimeOffset.FromUnixTimeSeconds(1_727_895_263);
-        Assert.Equal(10, updates.Count);
+        Assert.That(updates.Count, Is.EqualTo(10));
         for (int i = 0; i < updates.Count; i++)
         {
-            Assert.Equal("chatcmpl-ADymNiWWeqCJqHNFXiI1QtRcLuXcl", updates[i].ResponseId);
-            Assert.Equal("chatcmpl-ADymNiWWeqCJqHNFXiI1QtRcLuXcl", updates[i].MessageId);
-            Assert.Equal(createdAt, updates[i].CreatedAt);
-            Assert.Equal("gpt-4o-mini-2024-07-18", updates[i].ModelId);
-            Assert.Equal(ChatRole.Assistant, updates[i].Role);
-            Assert.Equal(i < 7 ? null : ChatFinishReason.ToolCalls, updates[i].FinishReason);
+            Assert.That(updates[i].ResponseId, Is.EqualTo("chatcmpl-ADymNiWWeqCJqHNFXiI1QtRcLuXcl"));
+            Assert.That(updates[i].MessageId, Is.EqualTo("chatcmpl-ADymNiWWeqCJqHNFXiI1QtRcLuXcl"));
+            Assert.That(updates[i].CreatedAt, Is.EqualTo(createdAt));
+            Assert.That(updates[i].ModelId, Is.EqualTo("gpt-4o-mini-2024-07-18"));
+            Assert.That(updates[i].Role, Is.EqualTo(ChatRole.Assistant));
+            Assert.That(updates[i].FinishReason, Is.EqualTo(i < 7 ? null : ChatFinishReason.ToolCalls));
         }
 
-        FunctionCallContent fcc = Assert.IsType<FunctionCallContent>(Assert.Single(updates[updates.Count - 1].Contents));
-        Assert.Equal("call_F9ZaqPWo69u0urxAhVt8meDW", fcc.CallId);
-        Assert.Equal("GetPersonAge", fcc.Name);
+        Assert.That(updates[updates.Count - 1].Contents.Count, Is.EqualTo(1));
+        var aiContent = updates[updates.Count - 1].Contents[0];
+        Assert.That(aiContent, Is.InstanceOf<FunctionCallContent>());
+        var fcc = (FunctionCallContent)aiContent;
+
+        Assert.That(fcc.CallId, Is.EqualTo("call_F9ZaqPWo69u0urxAhVt8meDW"));
+        Assert.That(fcc.Name, Is.EqualTo("GetPersonAge"));
         AssertExtensions.EqualFunctionCallParameters(new Dictionary<string, object?> { ["personName"] = "Alice" }, fcc.Arguments);
     }
 

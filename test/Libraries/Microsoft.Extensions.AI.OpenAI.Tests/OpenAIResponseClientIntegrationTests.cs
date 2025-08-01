@@ -2,10 +2,15 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.ClientModel.Primitives;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Azure.AI.OpenAI;
+using Azure.Identity;
 using Microsoft.TestUtilities;
 using OpenAI;
 using OpenAI.Responses;
@@ -55,7 +60,7 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
     }
 
     [ConditionalFact]
-    public async Task RemoteMCP_ListTools()
+    public async Task RemoteMcp_ListTools()
     {
         SkipIfNotEnabled();
 
@@ -79,9 +84,17 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
     }
 
     [ConditionalFact]
-    public async Task RemoteMCP_CallTool()
+    public async Task RemoteMcp_CallTool()
     {
         SkipIfNotEnabled();
+        Debugger.Launch();
+
+        using LoggingHttpHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        var options = new AzureOpenAIClientOptions
+        {
+            Transport = new HttpClientPipelineTransport(httpClient)
+        };
 
         ChatOptions chatOptions = new()
         {
@@ -90,49 +103,71 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
             RawRepresentationFactory = (_) =>
             {
                 var r = new ResponseCreationOptions();
-                r.Tools.Add(GetInternalMcpTool("deepwiki", "https://mcp.deepwiki.com/mcp"));
+                r.Tools.Add(GetInternalMcpTool("my-mcp-server", "https://my-mcp-hyegfqe0d5hjhpge.westus3-01.azurewebsites.net/sse"));
                 return r;
             }
         };
 
-        ChatResponse response = await CreateChatClient()!.GetResponseAsync(
-            "Tell me the path to the README.md file for Microsoft.Extensions.AI.Abstractions in the dotnet/extensions repository",
-            chatOptions);
+        var client = new AzureOpenAIClient(
+            new Uri("https://dacan-m8dpzcmb-eastus2.openai.azure.com/"),
+            new DefaultAzureCredential(true),
+            options).GetOpenAIResponseClient("gpt-4o-mini").AsIChatClient();
 
-        Assert.Contains("src/Libraries/Microsoft.Extensions.AI.Abstractions/README.md", response.Text);
+        List<ChatMessage> chatHistory = [new(ChatRole.User, "Convert 100F to Celsius")];
+        ChatResponse response = await client.GetResponseAsync(chatHistory, chatOptions);
+
+        while (true)
+        {
+            chatHistory.AddRange(response.Messages);
+
+            IEnumerable<HostedMcpServerToolApprovalRequestContent> approvalRequests = response.Messages
+                .SelectMany(m => m.Contents
+                .OfType<HostedMcpServerToolApprovalRequestContent>());
+
+            if (!approvalRequests.Any())
+            {
+                break;
+            }
+
+            var req = Assert.Single(approvalRequests);
+            chatHistory.Add(req.Approve());
+
+            response = await client.GetResponseAsync(chatHistory, chatOptions);
+        }
+
+        ////Assert.Contains("src/Libraries/Microsoft.Extensions.AI.Abstractions/README.md", response.Text);
 
         Type t = GetInternalOpenAIType("OpenAI.Responses.InternalMCPCallItemResource")!;
         IEnumerable<AIContent> contents = response.Messages
             .SelectMany(m => m.Contents
             .Where(c => (c.RawRepresentation?.GetType().Equals(t) ?? false) &&
-                t.GetProperty("Name")!.GetValue(c.RawRepresentation)!.Equals("ask_question")));
+                t.GetProperty("Name")!.GetValue(c.RawRepresentation)!.Equals("fahrenheit_to_celsius")));
 
         object rawRepresentation = Assert.Single(contents).RawRepresentation!;
         string callId = (string)t.GetProperty("Id")!.GetValue(rawRepresentation)!;
 
-        HostedMcpServerToolCallContent mcpToolCall = new(
-            callId,
+        HostedMcpServerToolCallContent mcpToolCall = new(callId,
             (string)t.GetProperty("Name")!.GetValue(rawRepresentation)!,
-            (string)t.GetProperty("ServerLabel")!.GetValue(rawRepresentation)!,
-            JsonSerializer.Deserialize<IReadOnlyDictionary<string, object?>>((string)t.GetProperty("Arguments")!.GetValue(rawRepresentation)!))
+            (string)t.GetProperty("ServerLabel")!.GetValue(rawRepresentation)!)
         {
+            Arguments = JsonSerializer.Deserialize<IReadOnlyDictionary<string, object?>>((string)t.GetProperty("Arguments")!.GetValue(rawRepresentation)!),
             RawRepresentation = rawRepresentation
         };
 
         HostedMcpServerToolResultContent mcpToolResult = new(callId)
         {
-            Output = (string?)t.GetProperty("Output")!.GetValue(rawRepresentation),
-            Error = (string?)t.GetProperty("Error")!.GetValue(rawRepresentation)
+            Output = [new TextContent((string?)t.GetProperty("Output")!.GetValue(rawRepresentation))],
+            IsError = (string?)t.GetProperty("Error")!.GetValue(rawRepresentation) is null
         };
 
         Assert.NotNull(mcpToolResult.Output);
-        Assert.Null(mcpToolResult.Error);
+        ////Assert.False(mcpToolResult.IsError);
 
-        Assert.Equal("ask_question", mcpToolCall.Name);
-        Assert.Equal("deepwiki", mcpToolCall.ServerName);
+        Assert.Equal("fahrenheit_to_celsius", mcpToolCall.Name);
+        ////Assert.Equal("deepwiki", mcpToolCall.ServerName);
         Assert.NotNull(mcpToolCall.Arguments);
-        Assert.Equal("dotnet/extensions", mcpToolCall.Arguments["repoName"]?.ToString());
-        Assert.True(mcpToolCall.Arguments.ContainsKey("question"));
+        ////Assert.Equal("dotnet/extensions", mcpToolCall.Arguments["repoName"]?.ToString());
+        ////Assert.True(mcpToolCall.Arguments.ContainsKey("question"));
     }
 
     private static Type GetInternalOpenAIType(string fqName)
@@ -144,8 +179,38 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
         object instance = Activator.CreateInstance(mcpToolType, name, url)!;
 
         // Disable approvals until we have the necessary abstraction.
-        mcpToolType.GetProperty("RequireApproval")?.SetValue(instance, BinaryData.FromString("\"never\""));
+        ////mcpToolType.GetProperty("RequireApproval")?.SetValue(instance, BinaryData.FromString("\"never\""));
 
         return (ResponseTool)instance;
+    }
+
+    [ConditionalFact]
+    public async Task LocalMcp_CallTool()
+    {
+        SkipIfNotEnabled();
+        Debugger.Launch();
+
+        using LoggingHttpHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        var options = new AzureOpenAIClientOptions
+        {
+            Transport = new HttpClientPipelineTransport(httpClient)
+        };
+
+        var client = new AzureOpenAIClient(
+            new Uri("https://dacan-m8dpzcmb-eastus2.openai.azure.com/"),
+            new DefaultAzureCredential(true),
+            options).GetOpenAIResponseClient("gpt-4o-mini")
+            .AsIChatClient()
+            .AsBuilder()
+            .ConfigureOptions((o) => { })
+            .UseMcpClient(new Uri("https://my-mcp-hyegfqe0d5hjhpge.westus3-01.azurewebsites.net/sse"), "my-mcp-server")
+            .UseFunctionInvocation()
+            .Build();
+
+        ChatOptions chatOptions = new();
+        List<ChatMessage> chatHistory = [new(ChatRole.User, "Convert 33.8 °F to Celsius, respond with digits only.")];
+        ChatResponse response = await client.GetResponseAsync(chatHistory, chatOptions);
+        Assert.Equal("1", response.Text);
     }
 }

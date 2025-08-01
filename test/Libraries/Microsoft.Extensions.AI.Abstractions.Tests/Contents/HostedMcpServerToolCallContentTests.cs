@@ -18,7 +18,7 @@ public class HostedMcpServerToolCallContentTests
         Assert.Null(c.AdditionalProperties);
 
         Assert.Equal("callId1", c.CallId);
-        Assert.Equal("name", c.Name);
+        Assert.Equal("name", c.ToolName);
         Assert.Equal("serverName", c.ServerName);
 
         Assert.Null(c.Arguments);
@@ -45,7 +45,7 @@ public class HostedMcpServerToolCallContentTests
         Assert.Same(props, c.AdditionalProperties);
 
         Assert.Equal("callId1", c.CallId);
-        Assert.Equal("name", c.Name);
+        Assert.Equal("name", c.ToolName);
         Assert.Equal("serverName", c.ServerName);
     }
 

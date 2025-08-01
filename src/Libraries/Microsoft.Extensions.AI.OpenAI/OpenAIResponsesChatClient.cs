@@ -157,11 +157,23 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                     message.Contents.Add(fcc);
                     break;
 
-                case FunctionCallOutputResponseItem functionCallOutputItem:
-                    message.Contents.Add(new FunctionResultContent(functionCallOutputItem.CallId, functionCallOutputItem.FunctionOutput) { RawRepresentation = functionCallOutputItem });
-                    break;
-
                 default:
+                    var type = outputItem.GetType();
+                    if (type == GetInternalOpenAIType("OpenAI.Responses.InternalMCPApprovalRequestItemResource"))
+                    {
+#pragma warning disable IL2075
+#pragma warning disable CS1729
+                        HostedMcpServerToolApprovalRequestContent hmstarc = new()
+                        {
+                            ApprovalId = (string)type.GetProperty("Id")!.GetValue(outputItem)!,
+                            RawRepresentation = outputItem
+                        };
+#pragma warning restore IL2075
+
+                        message.Contents.Add(hmstarc);
+                        break;
+                    }
+
                     message.Contents.Add(new() { RawRepresentation = outputItem });
                     break;
             }
@@ -172,6 +184,20 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
             yield return message;
         }
     }
+
+#pragma warning disable IL2026
+#pragma warning disable IL2067
+    private static Type GetInternalOpenAIType(string fqName) => typeof(ResponseTool).Assembly.GetType(fqName)!;
+
+    private static ResponseItem CreateInstance(Type type, params object?[] args)
+    {
+        return (ResponseItem)Activator.CreateInstance(type,
+            bindingAttr: BindingFlags.Instance | BindingFlags.NonPublic,
+            null,
+            args,
+            null)!;
+    }
+#pragma warning restore IL2026 // Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code
 
     /// <inheritdoc />
     public IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
@@ -543,6 +569,14 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                             }
 
                             yield return ResponseItem.CreateFunctionCallOutputItem(resultContent.CallId, result ?? string.Empty);
+                            break;
+
+                        case HostedMcpServerToolApprovalResponseContent approvalResponseContent:
+                            yield return CreateInstance(
+                                GetInternalOpenAIType("OpenAI.Responses.InternalMCPApprovalResponseItemResource"),
+                                null,
+                                approvalResponseContent.ApprovalId,
+                                approvalResponseContent.Approved);
                             break;
                     }
                 }

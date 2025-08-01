@@ -1756,6 +1756,54 @@
       ]
     },
     {
+      "Type": "class Microsoft.Extensions.AI.FunctionApprovalRequestContent : Microsoft.Extensions.AI.UserInputRequestContent",
+      "Stage": "Stable",
+      "Methods": [
+        {
+          "Member": "Microsoft.Extensions.AI.FunctionApprovalRequestContent.FunctionApprovalRequestContent();",
+          "Stage": "Stable"
+        },
+        {
+          "Member": "Microsoft.Extensions.AI.ChatMessage Microsoft.Extensions.AI.FunctionApprovalRequestContent.Approve();",
+          "Stage": "Stable"
+        },
+        {
+          "Member": "Microsoft.Extensions.AI.ChatMessage Microsoft.Extensions.AI.FunctionApprovalRequestContent.Reject();",
+          "Stage": "Stable"
+        }
+      ],
+      "Properties": [
+        {
+          "Member": "Microsoft.Extensions.AI.FunctionCallContent Microsoft.Extensions.AI.FunctionApprovalRequestContent.FunctionCall { get; set; }",
+          "Stage": "Stable"
+        }
+      ]
+    },
+    {
+      "Type": "class Microsoft.Extensions.AI.FunctionApprovalResponseContent : Microsoft.Extensions.AI.UserInputResponseContent",
+      "Stage": "Stable",
+      "Methods": [
+        {
+          "Member": "Microsoft.Extensions.AI.FunctionApprovalResponseContent.FunctionApprovalResponseContent();",
+          "Stage": "Stable"
+        },
+        {
+          "Member": "Microsoft.Extensions.AI.FunctionApprovalResponseContent.FunctionApprovalResponseContent(bool approved);",
+          "Stage": "Stable"
+        }
+      ],
+      "Properties": [
+        {
+          "Member": "bool Microsoft.Extensions.AI.FunctionApprovalResponseContent.Approved { get; set; }",
+          "Stage": "Stable"
+        },
+        {
+          "Member": "Microsoft.Extensions.AI.FunctionCallContent Microsoft.Extensions.AI.FunctionApprovalResponseContent.FunctionCall { get; set; }",
+          "Stage": "Stable"
+        }
+      ]
+    },
+    {
       "Type": "sealed class Microsoft.Extensions.AI.FunctionCallContent : Microsoft.Extensions.AI.AIContent",
       "Stage": "Stable",
       "Methods": [
@@ -1959,6 +2007,54 @@
         },
         {
           "Member": "static Microsoft.Extensions.AI.HostedMcpServerToolNeverRequireApprovalMode Microsoft.Extensions.AI.HostedMcpServerToolApprovalMode.NeverRequire { get; }",
+          "Stage": "Stable"
+        }
+      ]
+    },
+    {
+      "Type": "class Microsoft.Extensions.AI.HostedMcpServerToolApprovalRequestContent : Microsoft.Extensions.AI.UserInputRequestContent",
+      "Stage": "Stable",
+      "Methods": [
+        {
+          "Member": "Microsoft.Extensions.AI.HostedMcpServerToolApprovalRequestContent.HostedMcpServerToolApprovalRequestContent();",
+          "Stage": "Stable"
+        },
+        {
+          "Member": "Microsoft.Extensions.AI.ChatMessage Microsoft.Extensions.AI.HostedMcpServerToolApprovalRequestContent.Approve();",
+          "Stage": "Stable"
+        },
+        {
+          "Member": "Microsoft.Extensions.AI.ChatMessage Microsoft.Extensions.AI.HostedMcpServerToolApprovalRequestContent.Reject();",
+          "Stage": "Stable"
+        }
+      ],
+      "Properties": [
+        {
+          "Member": "Microsoft.Extensions.AI.HostedMcpServerToolCallContent? Microsoft.Extensions.AI.HostedMcpServerToolApprovalRequestContent.ToolCall { get; set; }",
+          "Stage": "Stable"
+        }
+      ]
+    },
+    {
+      "Type": "class Microsoft.Extensions.AI.HostedMcpServerToolApprovalResponseContent : Microsoft.Extensions.AI.UserInputResponseContent",
+      "Stage": "Stable",
+      "Methods": [
+        {
+          "Member": "Microsoft.Extensions.AI.HostedMcpServerToolApprovalResponseContent.HostedMcpServerToolApprovalResponseContent();",
+          "Stage": "Stable"
+        },
+        {
+          "Member": "Microsoft.Extensions.AI.HostedMcpServerToolApprovalResponseContent.HostedMcpServerToolApprovalResponseContent(bool approved);",
+          "Stage": "Stable"
+        }
+      ],
+      "Properties": [
+        {
+          "Member": "bool Microsoft.Extensions.AI.HostedMcpServerToolApprovalResponseContent.Approved { get; set; }",
+          "Stage": "Stable"
+        },
+        {
+          "Member": "Microsoft.Extensions.AI.HostedMcpServerToolCallContent? Microsoft.Extensions.AI.HostedMcpServerToolApprovalResponseContent.ToolCall { get; set; }",
           "Stage": "Stable"
         }
       ]
@@ -2591,6 +2687,38 @@
         },
         {
           "Member": "long? Microsoft.Extensions.AI.UsageDetails.TotalTokenCount { get; set; }",
+          "Stage": "Stable"
+        }
+      ]
+    },
+    {
+      "Type": "abstract class Microsoft.Extensions.AI.UserInputRequestContent : Microsoft.Extensions.AI.AIContent",
+      "Stage": "Stable",
+      "Methods": [
+        {
+          "Member": "Microsoft.Extensions.AI.UserInputRequestContent.UserInputRequestContent();",
+          "Stage": "Stable"
+        }
+      ],
+      "Properties": [
+        {
+          "Member": "string Microsoft.Extensions.AI.UserInputRequestContent.ApprovalId { get; set; }",
+          "Stage": "Stable"
+        }
+      ]
+    },
+    {
+      "Type": "abstract class Microsoft.Extensions.AI.UserInputResponseContent : Microsoft.Extensions.AI.AIContent",
+      "Stage": "Stable",
+      "Methods": [
+        {
+          "Member": "Microsoft.Extensions.AI.UserInputResponseContent.UserInputResponseContent();",
+          "Stage": "Stable"
+        }
+      ],
+      "Properties": [
+        {
+          "Member": "string Microsoft.Extensions.AI.UserInputResponseContent.ApprovalId { get; set; }",
           "Stage": "Stable"
         }
       ]

@@ -260,7 +260,6 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
 
             // Any function call work to do? If yes, ensure we're tracking that work in functionCallContents.
             bool requiresFunctionInvocation =
-                (options?.Tools is { Count: > 0 } || AdditionalTools is { Count: > 0 }) &&
                 iteration < MaximumIterationsPerRequest &&
                 CopyFunctionCalls(response.Messages, ref functionCallContents);
 

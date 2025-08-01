@@ -13,4 +13,22 @@ public class HostedMcpServerToolApprovalModeTests
         Assert.Same(HostedMcpServerToolApprovalMode.AlwaysRequire, HostedMcpServerToolApprovalMode.AlwaysRequire);
         Assert.Same(HostedMcpServerToolApprovalMode.NeverRequire, HostedMcpServerToolApprovalMode.NeverRequire);
     }
+
+    [Fact]
+    public void StaticProperties()
+    {
+        HostedMcpServerToolApprovalMode always = HostedMcpServerToolApprovalMode.Always;
+        Assert.NotNull(always);
+        Assert.Same(always, HostedMcpServerToolApprovalMode.Always);
+        Assert.Null(always.Require);
+        Assert.Null(always.NotRequire);
+
+        HostedMcpServerToolApprovalMode never = HostedMcpServerToolApprovalMode.Never;
+        Assert.NotNull(never);
+        Assert.Same(never, HostedMcpServerToolApprovalMode.Never);
+        Assert.Null(never.Require);
+        Assert.Null(never.NotRequire);
+
+        Assert.NotSame(always, never);
+    }
 }

@@ -135,8 +135,6 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
             response = await client.GetResponseAsync(chatHistory, chatOptions);
         }
 
-        ////Assert.Contains("src/Libraries/Microsoft.Extensions.AI.Abstractions/README.md", response.Text);
-
         Type t = GetInternalOpenAIType("OpenAI.Responses.InternalMCPCallItemResource")!;
         IEnumerable<AIContent> contents = response.Messages
             .SelectMany(m => m.Contents
@@ -212,5 +210,142 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
         List<ChatMessage> chatHistory = [new(ChatRole.User, "Convert 33.8 °F to Celsius, respond with digits only.")];
         ChatResponse response = await client.GetResponseAsync(chatHistory, chatOptions);
         Assert.Equal("1", response.Text);
+    }
+
+    [ConditionalFact]
+    public async Task ApprovalGeneratingChatClient_CallTool()
+    {
+        SkipIfNotEnabled();
+        Debugger.Launch();
+
+        using LoggingHttpHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        var options = new AzureOpenAIClientOptions
+        {
+            Transport = new HttpClientPipelineTransport(httpClient)
+        };
+
+        var client = new AzureOpenAIClient(
+            new Uri("https://dacan-m8dpzcmb-eastus2.openai.azure.com/"),
+            new DefaultAzureCredential(true),
+            options).GetOpenAIResponseClient("gpt-4o-mini")
+            .AsIChatClient()
+            .AsBuilder()
+            .UseMcpClient(new Uri("https://my-mcp-hyegfqe0d5hjhpge.westus3-01.azurewebsites.net/sse"), "my-mcp-server")
+            .UseNewFunctionInvocation()
+            .UseFunctionApprovalGeneration()
+            .Build();
+
+        ChatOptions chatOptions = new();
+        List<ChatMessage> chatHistory = [new(ChatRole.User, "Convert 33.8 °F to Celsius, respond with digits only.")];
+        ChatResponse response = await client.GetResponseAsync(chatHistory, chatOptions);
+
+        // Handle Function approvals.
+        while (true)
+        {
+            chatHistory.AddRange(response.Messages);
+
+            IEnumerable<FunctionApprovalRequestContent> approvalRequests = response.Messages
+                .SelectMany(m => m.Contents
+                .OfType<FunctionApprovalRequestContent>());
+
+            if (!approvalRequests.Any())
+            {
+                break;
+            }
+
+            var req = Assert.Single(approvalRequests);
+            chatHistory.Add(req.Approve());
+
+            response = await client.GetResponseAsync(chatHistory, chatOptions);
+        }
+
+        Assert.Equal("1", response.Text);
+    }
+
+    [ConditionalFact]
+    public async Task RemoteMCP_LocalMCP_ApprovalGeneratingChatClient_CallTool()
+    {
+        SkipIfNotEnabled();
+        Debugger.Launch();
+
+        using LoggingHttpHandler handler = new();
+        using HttpClient httpClient = new(handler);
+        var options = new AzureOpenAIClientOptions
+        {
+            Transport = new HttpClientPipelineTransport(httpClient)
+        };
+
+        var client = new AzureOpenAIClient(
+            new Uri("https://dacan-m8dpzcmb-eastus2.openai.azure.com/"),
+            new DefaultAzureCredential(true),
+            options).GetOpenAIResponseClient("gpt-4o-mini")
+            .AsIChatClient()
+            .AsBuilder()
+            .UseMcpClient(new Uri("https://my-mcp-hyegfqe0d5hjhpge.westus3-01.azurewebsites.net/sse"), "my-mcp-server")
+            .UseNewFunctionInvocation()
+            .UseFunctionApprovalGeneration()
+            .Build();
+
+        ChatOptions chatOptions = new()
+        {
+            // Replace this with HostedMcpServerTool once that's exposed.
+            // https://github.com/openai/openai-dotnet/issues/406
+            RawRepresentationFactory = (_) =>
+            {
+                var r = new ResponseCreationOptions();
+                r.Tools.Add(GetInternalMcpTool("wiki-tool", "https://mcp.deepwiki.com/mcp"));
+                return r;
+            }
+        };
+
+        string question =
+            """
+            Tell me the path to the README.md file for Microsoft.Extensions.AI.Abstractions in the dotnet/extensions repository,
+            and multiply 21 * 2.
+            """;
+        List<ChatMessage> chatHistory = [new(ChatRole.User, question)];
+
+        ChatResponse response = await client.GetResponseAsync(chatHistory, chatOptions);
+        chatHistory.AddRange(response.Messages);
+
+        // Handle function approvals.
+        while (true)
+        {
+            IEnumerable<FunctionApprovalRequestContent> approvalRequests = response.Messages
+                .SelectMany(m => m.Contents
+                .OfType<FunctionApprovalRequestContent>());
+
+            if (!approvalRequests.Any())
+            {
+                break;
+            }
+
+            var req = Assert.Single(approvalRequests);
+            chatHistory.Add(req.Approve());
+            response = await client.GetResponseAsync(chatHistory, chatOptions);
+            chatHistory.AddRange(response.Messages);
+        }
+
+        // Handle MCP tool approvals
+        while (true)
+        {
+            IEnumerable<HostedMcpServerToolApprovalRequestContent> approvalRequests = response.Messages
+                .SelectMany(m => m.Contents
+                .OfType<HostedMcpServerToolApprovalRequestContent>());
+
+            if (!approvalRequests.Any())
+            {
+                break;
+            }
+
+            var req = Assert.Single(approvalRequests);
+            chatHistory.Add(req.Approve());
+            response = await client.GetResponseAsync(chatHistory, chatOptions);
+            chatHistory.AddRange(response.Messages);
+        }
+
+        Assert.Contains("src/Libraries/Microsoft.Extensions.AI.Abstractions/README.md", response.Text);
+        Assert.Contains("42", response.Text);
     }
 }

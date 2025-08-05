@@ -6,7 +6,6 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.AI.Mcp;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using ModelContextProtocol.Client;
@@ -39,11 +38,7 @@ public class McpChatClient : DelegatingChatClient
         foreach (McpClientTool tool in _tools)
         {
             _logger.LogTrace($"Tool: {tool.Name}, Description: {tool.Description}");
-            optionsTools.Add(new AIFunctionApproval(tool, static (object? ctx) =>
-            {
-                Console.WriteLine(ctx);
-                return true;
-            }));
+            optionsTools.Add(tool);
         }
 
         return await base.GetResponseAsync(messages, options, cancellationToken);

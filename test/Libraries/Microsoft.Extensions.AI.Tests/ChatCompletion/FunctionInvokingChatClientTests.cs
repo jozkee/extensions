@@ -1104,13 +1104,13 @@ public class FunctionInvokingChatClientTests
                     new FunctionCallContent("callId2", "KnownFunc", new Dictionary<string, object?> { ["i"] = 2 })
                 ]),
                 new(ChatRole.Tool, [
-                    new FunctionResultContent("callId1", result: "Error: Requested function \"UnknownFunc\" not found."),
+                    ////new FunctionResultContent("callId1", result: "Error: Requested function \"UnknownFunc\" not found."),
                     new FunctionResultContent("callId2", result: "Known: 2")
                 ]),
                 new(ChatRole.Assistant, "done"),
             ];
 
-            var expected = fullPlanWithUnknown.Take(2).ToList();
+            var expected = fullPlanWithUnknown.Take(3).ToList();
             await InvokeAndAssertAsync(options, fullPlanWithUnknown, expected, configure);
             await InvokeAndAssertStreamingAsync(options, fullPlanWithUnknown, expected, configure);
         }
@@ -1161,20 +1161,22 @@ public class FunctionInvokingChatClientTests
                 new FunctionCallContent("callId1", "Known"),
                 new FunctionCallContent("callId2", "DefOnly")
             ]),
-            new(ChatRole.Tool, [new FunctionResultContent("callId1", result: "OK"), new FunctionResultContent("callId2", result: "nope")]),
+            new(ChatRole.Tool, [
+                new FunctionResultContent("callId1", result: "OK"),
+                /*new FunctionResultContent("callId2", result: "nope")*/]),
             new(ChatRole.Assistant, "done"),
         ];
 
-        List<ChatMessage> expected = fullPlan.Take(2).ToList();
+        List<ChatMessage> expected = fullPlan.Take(3).ToList();
 
         Func<ChatClientBuilder, ChatClientBuilder> configure = b => b.Use(s => new FunctionInvokingChatClient(s) { TerminateOnUnknownCalls = false });
         await InvokeAndAssertAsync(options, fullPlan, expected, configure);
-        Assert.Equal(0, invoked);
+        Assert.Equal(1, invoked);
 
         invoked = 0;
         configure = b => b.Use(s => new FunctionInvokingChatClient(s) { TerminateOnUnknownCalls = true });
         await InvokeAndAssertStreamingAsync(options, fullPlan, expected, configure);
-        Assert.Equal(0, invoked);
+        Assert.Equal(1, invoked);
     }
 
     private sealed class CustomSynchronizationContext : SynchronizationContext

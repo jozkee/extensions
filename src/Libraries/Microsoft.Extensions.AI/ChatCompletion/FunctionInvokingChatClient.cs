@@ -313,10 +313,11 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
                 }
             }
 
+            bool shouldTerminate = ShouldTerminateLoopBasedOnHandleableFunctions(functionCallContents, toolMap);
+
             // If there's nothing more to do, break out of the loop and allow the handling at the
             // end to configure the response with aggregated data from previous requests.
-            if (!requiresFunctionInvocation ||
-                ShouldTerminateLoopBasedOnHandleableFunctions(functionCallContents, toolMap))
+            if (!requiresFunctionInvocation || functionCallContents!.Count == 0)
             {
                 break;
             }
@@ -330,7 +331,7 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
             responseMessages.AddRange(modeAndMessages.MessagesAdded);
             consecutiveErrorCount = modeAndMessages.NewConsecutiveErrorCount;
 
-            if (modeAndMessages.ShouldTerminate)
+            if (shouldTerminate || modeAndMessages.ShouldTerminate)
             {
                 break;
             }
@@ -404,10 +405,11 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
                 Activity.Current = activity; // workaround for https://github.com/dotnet/runtime/issues/47802
             }
 
+            bool shouldTerminate = ShouldTerminateLoopBasedOnHandleableFunctions(functionCallContents, toolMap ??= CreateToolsDictionary(AdditionalTools, options?.Tools));
+
             // If there's nothing more to do, break out of the loop and allow the handling at the
             // end to configure the response with aggregated data from previous requests.
-            if (iteration >= _maximumIterationsPerRequest ||
-                ShouldTerminateLoopBasedOnHandleableFunctions(functionCallContents, toolMap ??= CreateToolsDictionary(AdditionalTools, options?.Tools)))
+            if (iteration >= _maximumIterationsPerRequest || functionCallContents!.Count == 0)
             {
                 break;
             }
@@ -452,7 +454,7 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
                 Activity.Current = activity; // workaround for https://github.com/dotnet/runtime/issues/47802
             }
 
-            if (modeAndMessages.ShouldTerminate)
+            if (shouldTerminate || modeAndMessages.ShouldTerminate)
             {
                 break;
             }
@@ -646,15 +648,18 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
 
         // At this point, we have both function call requests and some tools.
         // Look up each function.
-        foreach (var fcc in functionCalls)
+        bool shouldTerminate = false;
+        for (int i = functionCalls.Count - 1; i >= 0; i--)
         {
+            var fcc = functionCalls[i];
             if (toolMap.TryGetValue(fcc.Name, out var tool))
             {
                 if (tool is not AIFunction)
                 {
                     // The tool was found but it's not invocable. Regardless of TerminateOnUnknownCallRequests,
                     // we need to break out of the loop so that callers can handle all the call requests.
-                    return true;
+                    shouldTerminate |= true;
+                    functionCalls.RemoveAt(i);
                 }
             }
             else
@@ -664,12 +669,13 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
                 // creating a NotFound response message.
                 if (TerminateOnUnknownCalls)
                 {
-                    return true;
+                    shouldTerminate |= true;
+                    functionCalls.RemoveAt(i);
                 }
             }
         }
 
-        return false;
+        return shouldTerminate;
     }
 
     /// <summary>

@@ -19,7 +19,7 @@ public class FunctionApprovalRequestContentTests
         Assert.Throws<ArgumentException>("id", () => new FunctionApprovalRequestContent("", functionCall));
         Assert.Throws<ArgumentException>("id", () => new FunctionApprovalRequestContent("\r\t\n ", functionCall));
 
-        Assert.Throws<ArgumentNullException>("functionCall", () => new FunctionApprovalRequestContent("id", null!));
+        Assert.Throws<ArgumentNullException>("callContent", () => new FunctionApprovalRequestContent("id", null!));
     }
 
     [Theory]
@@ -33,6 +33,7 @@ public class FunctionApprovalRequestContentTests
         FunctionApprovalRequestContent content = new(id, functionCall);
 
         Assert.Same(id, content.Id);
+        Assert.Same(functionCall, content.CallContent);
         Assert.Same(functionCall, content.FunctionCall);
     }
 
@@ -51,6 +52,7 @@ public class FunctionApprovalRequestContentTests
         Assert.NotNull(response);
         Assert.Same(id, response.Id);
         Assert.Equal(approved, response.Approved);
+        Assert.Same(functionCall, response.CallContent);
         Assert.Same(functionCall, response.FunctionCall);
     }
 
@@ -64,8 +66,9 @@ public class FunctionApprovalRequestContentTests
 
         Assert.NotNull(deserializedContent);
         Assert.Equal(content.Id, deserializedContent.Id);
+        Assert.NotNull(deserializedContent.CallContent);
         Assert.NotNull(deserializedContent.FunctionCall);
-        Assert.Equal(content.FunctionCall.CallId, deserializedContent.FunctionCall.CallId);
+        Assert.Equal(content.FunctionCall!.CallId, deserializedContent.FunctionCall.CallId);
         Assert.Equal(content.FunctionCall.Name, deserializedContent.FunctionCall.Name);
     }
 }

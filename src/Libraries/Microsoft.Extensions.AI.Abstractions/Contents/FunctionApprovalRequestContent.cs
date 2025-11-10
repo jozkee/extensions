@@ -33,14 +33,6 @@ public sealed class FunctionApprovalRequestContent : UserInputRequestContent
     public AIContent CallContent { get; }
 
     /// <summary>
-    /// Gets the function call that pre-invoke approval is required for.
-    /// </summary>
-    /// <remarks>
-    /// This property provides backwards compatibility by returning <see cref="CallContent"/> if it is a <see cref="FunctionCallContent"/>, otherwise <see langword="null"/>.
-    /// </remarks>
-    public FunctionCallContent? FunctionCall => CallContent as FunctionCallContent;
-
-    /// <summary>
     /// Creates a <see cref="FunctionApprovalResponseContent"/> to indicate whether the call is approved or rejected based on the value of <paramref name="approved"/>.
     /// </summary>
     /// <param name="approved"><see langword="true"/> if the call is approved; otherwise, <see langword="false"/>.</param>

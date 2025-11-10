@@ -38,12 +38,4 @@ public sealed class FunctionApprovalResponseContent : UserInputResponseContent
     /// Gets the call content for which approval was requested.
     /// </summary>
     public AIContent CallContent { get; }
-
-    /// <summary>
-    /// Gets the function call for which approval was requested.
-    /// </summary>
-    /// <remarks>
-    /// This property provides backwards compatibility by returning <see cref="CallContent"/> if it is a <see cref="FunctionCallContent"/>, otherwise <see langword="null"/>.
-    /// </remarks>
-    public FunctionCallContent? FunctionCall => CallContent as FunctionCallContent;
 }

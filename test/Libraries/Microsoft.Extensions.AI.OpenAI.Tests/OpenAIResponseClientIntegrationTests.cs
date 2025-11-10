@@ -144,7 +144,7 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
             Assert.NotNull(response);
             Assert.NotEmpty(response.Messages.SelectMany(m => m.Contents).OfType<McpServerToolCallContent>());
             Assert.NotEmpty(response.Messages.SelectMany(m => m.Contents).OfType<McpServerToolResultContent>());
-            Assert.Empty(response.Messages.SelectMany(m => m.Contents).OfType<McpServerToolApprovalRequestContent>());
+            Assert.DoesNotContain(response.Messages.SelectMany(m => m.Contents).OfType<FunctionApprovalRequestContent>(), f => f.CallContent is McpServerToolCallContent);
 
             Assert.Contains("src/Libraries/Microsoft.Extensions.AI.Abstractions/README.md", response.Text);
         }
@@ -198,8 +198,9 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
                 var approvalResponse = new ChatMessage(ChatRole.Tool,
                     response.Messages
                             .SelectMany(m => m.Contents)
-                            .OfType<McpServerToolApprovalRequestContent>()
-                            .Select(c => new McpServerToolApprovalResponseContent(c.ToolCall.CallId, true))
+                            .OfType<FunctionApprovalRequestContent>()
+                            .Where(f => f.CallContent is McpServerToolCallContent)
+                            .Select(c => new FunctionApprovalResponseContent(((McpServerToolCallContent)c.CallContent).CallId, true, c.CallContent))
                             .ToArray());
                 if (approvalResponse.Contents.Count == 0)
                 {
@@ -407,8 +408,8 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
             if (approval)
             {
                 input.AddRange(response.Messages);
-                var approvalRequest = Assert.Single(response.Messages.SelectMany(m => m.Contents).OfType<McpServerToolApprovalRequestContent>());
-                Assert.Equal("search_events", approvalRequest.ToolCall.ToolName);
+                var approvalRequest = Assert.Single(response.Messages.SelectMany(m => m.Contents).OfType<FunctionApprovalRequestContent>().Where(f => f.CallContent is McpServerToolCallContent));
+                Assert.Equal("search_events", ((McpServerToolCallContent)approvalRequest.CallContent).ToolName);
                 input.Add(new ChatMessage(ChatRole.Tool, [approvalRequest.CreateResponse(true)]));
 
                 response = streaming ?

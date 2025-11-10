@@ -23,7 +23,6 @@ public class GeneralizedApprovalTests
         // Assert
         Assert.Equal("approval-1", request.Id);
         Assert.Same(functionCall, request.CallContent);
-        Assert.Same(functionCall, request.FunctionCall); // Backward compatibility property
     }
 
     [Fact]
@@ -38,8 +37,7 @@ public class GeneralizedApprovalTests
         // Assert
         Assert.Equal("approval-2", request.Id);
         Assert.Same(mcpCall, request.CallContent);
-        Assert.Null(request.FunctionCall); // Returns null for non-FunctionCallContent
-        
+
         // Can cast back to McpServerToolCallContent
         var retrievedMcpCall = Assert.IsType<McpServerToolCallContent>(request.CallContent);
         Assert.Equal("call-456", retrievedMcpCall.CallId);
@@ -60,7 +58,6 @@ public class GeneralizedApprovalTests
         Assert.Equal("approval-1", response.Id);
         Assert.True(response.Approved);
         Assert.Same(functionCall, response.CallContent);
-        Assert.Same(functionCall, response.FunctionCall); // Backward compatibility property
     }
 
     [Fact]
@@ -76,8 +73,7 @@ public class GeneralizedApprovalTests
         Assert.Equal("approval-2", response.Id);
         Assert.False(response.Approved);
         Assert.Same(mcpCall, response.CallContent);
-        Assert.Null(response.FunctionCall); // Returns null for non-FunctionCallContent
-        
+
         // Can cast back to McpServerToolCallContent
         var retrievedMcpCall = Assert.IsType<McpServerToolCallContent>(response.CallContent);
         Assert.Equal("call-456", retrievedMcpCall.CallId);
@@ -156,8 +152,6 @@ public class GeneralizedApprovalTests
         var response = new FunctionApprovalResponseContent("approval-2", true, mcpCall);
 
         // Act & Assert
-        Assert.Null(request.FunctionCall); // Backward compatibility property returns null
-        Assert.Null(response.FunctionCall); // Backward compatibility property returns null
         Assert.NotNull(request.CallContent); // But CallContent still has the value
         Assert.NotNull(response.CallContent); // But CallContent still has the value
     }

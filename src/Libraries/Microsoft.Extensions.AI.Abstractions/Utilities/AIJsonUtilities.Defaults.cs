@@ -129,8 +129,6 @@ public static partial class AIJsonUtilities
     [JsonSerializable(typeof(FunctionApprovalResponseContent))]
     [JsonSerializable(typeof(McpServerToolCallContent))]
     [JsonSerializable(typeof(McpServerToolResultContent))]
-    [JsonSerializable(typeof(McpServerToolApprovalRequestContent))]
-    [JsonSerializable(typeof(McpServerToolApprovalResponseContent))]
     [JsonSerializable(typeof(CodeInterpreterToolCallContent))]
     [JsonSerializable(typeof(CodeInterpreterToolResultContent))]
     [JsonSerializable(typeof(ResponseContinuationToken))]

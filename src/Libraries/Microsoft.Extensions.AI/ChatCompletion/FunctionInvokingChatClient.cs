@@ -1345,11 +1345,6 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
                             goto default;
                         }
 
-                        if (message.Role != ChatRole.User)
-                        {
-                            Throw.ArgumentException(nameof(messages), $"{nameof(FunctionApprovalResponseContent)} can only be included in messages with ChatRole.User.");
-                        }
-
                         // Validation: Remove the call id for each approval response, to check it off the list of requests we need responses for.
                         _ = approvalRequestCallIds?.Remove(fccResponse.CallId);
                         (allApprovalResponses ??= []).Add(farc);

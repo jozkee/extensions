@@ -855,7 +855,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                     ResponseItem? directItem = item switch
                     {
                         { RawRepresentation: ResponseItem rawRep } => rawRep,
-                        FunctionApprovalResponseContent { CallContent: McpServerToolCallContent mcpCall } farc => ResponseItem.CreateMcpApprovalResponseItem(mcpCall.CallId, farc.Approved), // not sure if this will work
+                        FunctionApprovalResponseContent { CallContent: McpServerToolCallContent mcpCall } farc => ResponseItem.CreateMcpApprovalResponseItem(mcpCall.CallId, farc.Approved),
                         _ => null
                     };
 

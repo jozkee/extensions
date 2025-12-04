@@ -156,8 +156,8 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
         SkipIfNotEnabled();
 
         await RunAsync(false, false, false);
-        await RunAsync(true, true, false);
         await RunAsync(false, false, true);
+        await RunAsync(true, true, false);
         await RunAsync(true, true, true);
 
         async Task RunAsync(bool streaming, bool requireSpecific, bool useConversationId)

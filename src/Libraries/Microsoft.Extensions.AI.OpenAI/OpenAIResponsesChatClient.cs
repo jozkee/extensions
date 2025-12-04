@@ -222,10 +222,6 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                     });
                     break;
 
-                case McpToolCallApprovalResponseItem mtcari:
-                    message.Contents.Add(new FunctionApprovalResponseContent(mtcari.ApprovalRequestId, mtcari.Approved, null!) { RawRepresentation = mtcari });
-                    break;
-
                 case CodeInterpreterCallResponseItem cicri:
                     AddCodeInterpreterContents(cicri, message.Contents);
                     break;

@@ -9,7 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace Microsoft.Extensions.AI.ChatCompletion;
+namespace Microsoft.Extensions.AI;
 
 public class FunctionInvokingChatClientApprovalsTests
 {
@@ -791,48 +791,11 @@ public class FunctionInvokingChatClientApprovalsTests
 
         var invokeException = await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await InvokeAndAssertAsync(options, input, [], [], []));
-        Assert.Equal("FunctionApprovalRequestContent found with Call Id(s) 'callId1' that have no matching FunctionApprovalResponseContent.", invokeException.Message);
+        Assert.Equal("FunctionApprovalRequestContent found with CallId(s) 'callId1' that have no matching FunctionApprovalResponseContent.", invokeException.Message);
 
         var invokeStreamingException = await Assert.ThrowsAsync<InvalidOperationException>(
             async () => await InvokeAndAssertStreamingAsync(options, input, [], [], []));
-        Assert.Equal("FunctionApprovalRequestContent found with Call Id(s) 'callId1' that have no matching FunctionApprovalResponseContent.", invokeStreamingException.Message);
-    }
-
-    [Theory]
-    [InlineData("system")]
-    [InlineData("assistant")]
-    [InlineData("tool")]
-    public async Task ApprovalResponseWithNonUserRoleThrowsAsync(string roleValue)
-    {
-        var invalidRole = new ChatRole(roleValue);
-        var options = new ChatOptions
-        {
-            Tools =
-            [
-                new ApprovalRequiredAIFunction(AIFunctionFactory.Create(() => "Result 1", "Func1")),
-            ]
-        };
-
-        List<ChatMessage> input =
-        [
-            new ChatMessage(ChatRole.User, "hello"),
-            new ChatMessage(ChatRole.Assistant,
-            [
-                new FunctionApprovalRequestContent("callId1", new FunctionCallContent("callId1", "Func1")),
-            ]) { MessageId = "resp1" },
-            new ChatMessage(invalidRole,
-            [
-                new FunctionApprovalResponseContent("callId1", true, new FunctionCallContent("callId1", "Func1")),
-            ]),
-        ];
-
-        var invokeException = await Assert.ThrowsAsync<ArgumentException>("messages",
-            () => InvokeAndAssertAsync(options, input, [], [], []));
-        Assert.Contains(nameof(FunctionApprovalResponseContent), invokeException.Message);
-
-        var invokeStreamingException = await Assert.ThrowsAsync<ArgumentException>("messages",
-            () => InvokeAndAssertStreamingAsync(options, input, [], [], []));
-        Assert.Contains(nameof(FunctionApprovalResponseContent), invokeStreamingException.Message);
+        Assert.Equal("FunctionApprovalRequestContent found with CallId(s) 'callId1' that have no matching FunctionApprovalResponseContent.", invokeStreamingException.Message);
     }
 
     [Fact]

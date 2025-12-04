@@ -1328,25 +1328,25 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
                 {
                     case FunctionApprovalRequestContent farc:
                         // Skip if CallContent is not FunctionCallContent
-                        if (farc.CallContent is not FunctionCallContent fcc)
+                        if (farc.CallContent is not FunctionCallContent requestFcc)
                         {
                             goto default;
                         }
 
                         // Validation: Capture each call id for each approval request to ensure later we have a matching response.
-                        _ = (approvalRequestCallIds ??= []).Add(fcc.CallId);
+                        _ = (approvalRequestCallIds ??= []).Add(requestFcc.CallId);
                         (allApprovalRequestsMessages ??= []).Add(farc.Id, message);
                         break;
 
                     case FunctionApprovalResponseContent farc:
                         // Skip if CallContent is not FunctionCallContent
-                        if (farc.CallContent is not FunctionCallContent fccResponse)
+                        if (farc.CallContent is not FunctionCallContent responseFcc)
                         {
                             goto default;
                         }
 
                         // Validation: Remove the call id for each approval response, to check it off the list of requests we need responses for.
-                        _ = approvalRequestCallIds?.Remove(fccResponse.CallId);
+                        _ = approvalRequestCallIds?.Remove(responseFcc.CallId);
                         (allApprovalResponses ??= []).Add(farc);
                         break;
 
@@ -1392,7 +1392,7 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
         if (approvalRequestCallIds is { Count: > 0 })
         {
             Throw.InvalidOperationException(
-                $"FunctionApprovalRequestContent found with Call Id(s) '{string.Join(", ", approvalRequestCallIds)}' that have no matching FunctionApprovalResponseContent.");
+                $"FunctionApprovalRequestContent found with CallId(s) '{string.Join(", ", approvalRequestCallIds)}' that have no matching FunctionApprovalResponseContent.");
         }
 
         // 2nd iteration, over all approval responses:
@@ -1416,7 +1416,7 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
                 ChatMessage? requestMessage = null;
                 _ = allApprovalRequestsMessages?.TryGetValue(fcc.CallId, out requestMessage);
 
-                (targetList ??= []).Add(new() { Response = approvalResponse, RequestMessage = requestMessage });
+                (targetList ??= []).Add(new() { Response = approvalResponse, FunctionCallContent = fcc, RequestMessage = requestMessage });
             }
         }
 
@@ -1430,7 +1430,7 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
     /// <returns>The <see cref="AIContent"/> for the rejected function calls.</returns>
     private static List<AIContent>? GenerateRejectedFunctionResults(List<ApprovalResultWithRequestMessage>? rejections) =>
         rejections is { Count: > 0 } ?
-            rejections.ConvertAll(static m => (AIContent)new FunctionResultContent(((FunctionCallContent)m.Response.CallContent).CallId, "Error: Tool call invocation was rejected by user.")) :
+            rejections.ConvertAll(static m => (AIContent)new FunctionResultContent(m.FunctionCallContent.CallId, "Error: Tool call invocation was rejected by user.")) :
             null;
 
     /// <summary>
@@ -1471,7 +1471,7 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
                 }
                 else
                 {
-                    currentMessage.Contents.Add((FunctionCallContent)resultWithRequestMessage.Response.CallContent);
+                    currentMessage.Contents.Add(resultWithRequestMessage.FunctionCallContent);
                 }
 
 #pragma warning disable IDE0058 // Temporary workaround for Roslyn analyzer issue (see https://github.com/dotnet/roslyn/issues/80499)
@@ -1500,7 +1500,7 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
     private static ChatMessage ConvertToFunctionCallContentMessage(ApprovalResultWithRequestMessage resultWithRequestMessage, string? fallbackMessageId)
     {
         ChatMessage functionCallMessage = resultWithRequestMessage.RequestMessage?.Clone() ?? new() { Role = ChatRole.Assistant };
-        functionCallMessage.Contents = [(FunctionCallContent)resultWithRequestMessage.Response.CallContent];
+        functionCallMessage.Contents = [resultWithRequestMessage.FunctionCallContent];
         functionCallMessage.MessageId ??= fallbackMessageId;
         return functionCallMessage;
     }
@@ -1656,7 +1656,7 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
         {
             // The FRC that is generated here is already added to originalMessages by ProcessFunctionCallsAsync.
             var modeAndMessages = await ProcessFunctionCallsAsync(
-                originalMessages, options, toolMap, notInvokedApprovals.Select(x => (FunctionCallContent)x.Response.CallContent).ToList(), 0, consecutiveErrorCount, isStreaming, cancellationToken);
+                originalMessages, options, toolMap, notInvokedApprovals.Select(x => x.FunctionCallContent).ToList(), 0, consecutiveErrorCount, isStreaming, cancellationToken);
             consecutiveErrorCount = modeAndMessages.NewConsecutiveErrorCount;
 
             return (modeAndMessages.MessagesAdded, modeAndMessages.ShouldTerminate, consecutiveErrorCount);
@@ -1732,9 +1732,10 @@ public partial class FunctionInvokingChatClient : DelegatingChatClient
         Exception,
     }
 
-    private struct ApprovalResultWithRequestMessage
+    private readonly struct ApprovalResultWithRequestMessage
     {
-        public FunctionApprovalResponseContent Response { get; set; }
-        public ChatMessage? RequestMessage { get; set; }
+        public FunctionApprovalResponseContent Response { get; init; }
+        public FunctionCallContent FunctionCallContent { get; init; }
+        public ChatMessage? RequestMessage { get; init; }
     }
 }

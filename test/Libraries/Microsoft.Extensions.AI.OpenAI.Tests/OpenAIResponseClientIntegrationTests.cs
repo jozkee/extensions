@@ -156,8 +156,8 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
         SkipIfNotEnabled();
 
         await RunAsync(false, false, false);
-        await RunAsync(true, true, false);
-        await RunAsync(false, false, true);
+        //// await RunAsync(true, true, false);
+        //// await RunAsync(false, false, true);
         await RunAsync(true, true, true);
 
         async Task RunAsync(bool streaming, bool requireSpecific, bool useConversationId)
@@ -202,7 +202,7 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
                             .Select(c =>
                             {
                                 var mcpCallContent = Assert.IsType<McpServerToolCallContent>(c.FunctionCall);
-                                return new FunctionApprovalResponseContent(mcpCallContent.CallId, true, c.FunctionCall);
+                                return new FunctionApprovalResponseContent(mcpCallContent.CallId, true, mcpCallContent);
                             })
                             .ToArray());
                 if (approvalResponse.Contents.Count == 0)

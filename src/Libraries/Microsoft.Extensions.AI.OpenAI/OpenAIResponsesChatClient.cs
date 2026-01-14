@@ -1116,6 +1116,25 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                                 {
                                     mtci.ToolOutput = string.Concat(outputList.OfType<TextContent>());
                                 }
+                                else if (mstrc.Result is AIContent singleContent && singleContent is TextContent tc)
+                                {
+                                    mtci.ToolOutput = tc.Text;
+                                }
+                                else if (mstrc.Result is string resultString)
+                                {
+                                    mtci.ToolOutput = resultString;
+                                }
+                                else if (mstrc.Result is { } resultObj)
+                                {
+                                    try
+                                    {
+                                        mtci.ToolOutput = JsonSerializer.Serialize(resultObj, AIJsonUtilities.DefaultOptions.GetTypeInfo(typeof(object)));
+                                    }
+                                    catch (NotSupportedException)
+                                    {
+                                        // If the type can't be serialized, skip it and leave ToolOutput null.
+                                    }
+                                }
 
                                 yield return mtci;
                             }

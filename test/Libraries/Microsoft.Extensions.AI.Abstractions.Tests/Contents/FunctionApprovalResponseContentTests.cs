@@ -30,7 +30,7 @@ public class FunctionApprovalResponseContentTests
         FunctionCallContent functionCall = new("FCC1", "TestFunction");
         FunctionApprovalResponseContent content = new(id, approved, functionCall);
 
-        Assert.Same(id, content.Id);
+        Assert.Same(id, content.RequestId);
         Assert.Equal(approved, content.Approved);
         Assert.Same(functionCall, content.FunctionCall);
     }
@@ -49,7 +49,7 @@ public class FunctionApprovalResponseContentTests
         var deserializedContent = JsonSerializer.Deserialize<FunctionApprovalResponseContent>(json, AIJsonUtilities.DefaultOptions);
 
         Assert.NotNull(deserializedContent);
-        Assert.Equal(content.Id, deserializedContent.Id);
+        Assert.Equal(content.RequestId, deserializedContent.RequestId);
         Assert.Equal(content.Approved, deserializedContent.Approved);
         Assert.Equal(content.Reason, deserializedContent.Reason);
         Assert.NotNull(deserializedContent.FunctionCall);

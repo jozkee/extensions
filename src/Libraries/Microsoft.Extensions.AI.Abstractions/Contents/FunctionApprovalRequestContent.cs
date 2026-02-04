@@ -12,21 +12,25 @@ namespace Microsoft.Extensions.AI;
 /// Represents a request for user approval of a function call.
 /// </summary>
 [Experimental(DiagnosticIds.Experiments.AIFunctionApprovals, UrlFormat = DiagnosticIds.UrlFormat)]
-public sealed class FunctionApprovalRequestContent : UserInputRequestContent
+public sealed class FunctionApprovalRequestContent : InputRequestContent
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="FunctionApprovalRequestContent"/> class.
     /// </summary>
-    /// <param name="id">The ID that uniquely identifies the function approval request/response pair.</param>
-    /// <param name="functionCall">The function call that requires user approval.</param>
-    /// <exception cref="ArgumentNullException"><paramref name="id"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentException"><paramref name="id"/> is empty or composed entirely of whitespace.</exception>
+    /// <param name="requestId">The identifier of this request.</param>    /// <param name="functionCall">The function call that requires user approval.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="requestId"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="requestId"/> is empty or composed entirely of whitespace.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="functionCall"/> is <see langword="null"/>.</exception>
-    public FunctionApprovalRequestContent(string id, FunctionCallContent functionCall)
-        : base(id)
+    public FunctionApprovalRequestContent(string requestId, FunctionCallContent functionCall)
     {
+        RequestId = Throw.IfNullOrWhitespace(requestId);
         FunctionCall = Throw.IfNull(functionCall);
     }
+
+    /// <summary>
+    /// Gets the ID that uniquely identifies the function approval request/response pair.
+    /// </summary>
+    public override string RequestId { get; }
 
     /// <summary>
     /// Gets the function call that pre-invoke approval is required for.
@@ -39,5 +43,5 @@ public sealed class FunctionApprovalRequestContent : UserInputRequestContent
     /// <param name="approved"><see langword="true"/> if the function call is approved; otherwise, <see langword="false"/>.</param>
     /// <param name="reason">An optional reason for the approval or rejection.</param>
     /// <returns>The <see cref="FunctionApprovalResponseContent"/> representing the approval response.</returns>
-    public FunctionApprovalResponseContent CreateResponse(bool approved, string? reason = null) => new(Id, approved, FunctionCall) { Reason = reason };
+    public FunctionApprovalResponseContent CreateResponse(bool approved, string? reason = null) => new(RequestId, approved, FunctionCall) { Reason = reason };
 }

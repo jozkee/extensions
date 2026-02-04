@@ -385,19 +385,23 @@ public class SummarizingChatReducerTests
             m => Assert.StartsWith("Do they make good lap dogs", m.Text, StringComparison.Ordinal));
     }
 
-    private sealed class TestUserInputRequestContent : UserInputRequestContent
+    private sealed class TestUserInputRequestContent : InputRequestContent
     {
-        public TestUserInputRequestContent(string id)
-            : base(id)
+        public TestUserInputRequestContent(string requestId)
         {
+            RequestId = requestId;
         }
+
+        public override string RequestId { get; }
     }
 
-    private sealed class TestUserInputResponseContent : UserInputResponseContent
+    private sealed class TestUserInputResponseContent : InputResponseContent
     {
-        public TestUserInputResponseContent(string id)
-            : base(id)
+        public TestUserInputResponseContent(string requestId)
         {
+            RequestId = requestId;
         }
+
+        public override string RequestId { get; }
     }
 }

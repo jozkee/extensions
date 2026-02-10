@@ -1,0 +1,119 @@
+# MCP API Design - Current State Analysis
+
+## Current Hierarchy (Already Implemented ✅)
+
+The current implementation already follows the recommended structure from PR #7276!
+
+\\\
+AIContent
+├── ToolCallContent                    (CallId) ✅ BASE CLASS
+│   ├── FunctionCallContent            (+ Name, Arguments, Exception, InformationalOnly) ✅
+│   ├── McpServerToolCallContent       (+ Name, ServerName, Arguments) ✅ SIBLING of FCC
+│   ├── CodeInterpreterToolCallContent (+ Inputs) ✅
+│   └── ImageGenerationToolCallContent () ✅
+├── ToolResultContent                  (CallId) ✅ BASE CLASS
+│   ├── FunctionResultContent          (+ Result, Exception) ✅
+│   ├── McpServerToolResultContent     (+ Outputs: IList<AIContent>) ✅
+│   ├── CodeInterpreterToolResultContent (+ Outputs) ✅
+│   └── ImageGenerationToolResultContent (+ Outputs) ✅
+├── InputRequestContent ✅
+│   └── ToolApprovalRequestContent     (ToolCall: ToolCallContent) ✅ ALREADY RENAMED
+│       Constructors:
+│       - (requestId, FunctionCallContent) ✅
+│       - (requestId, McpServerToolCallContent) ✅
+│       - [JsonConstructor] (requestId, ToolCallContent) - for extensibility ✅
+└── InputResponseContent ✅
+    └── ToolApprovalResponseContent    (ToolCall: ToolCallContent, Approved, Reason) ✅ ALREADY RENAMED
+        Constructors:
+        - (requestId, approved, FunctionCallContent) ✅
+        - (requestId, approved, McpServerToolCallContent) ✅
+        - [JsonConstructor] (requestId, approved, ToolCallContent) - for extensibility ✅
+\\\
+
+## Key Design Decisions - Already Implemented ✅
+
+### 1. McpServerToolCallContent is sibling to FunctionCallContent ✅
+- **Status**: Correctly inherits from ToolCallContent, NOT FunctionCallContent
+- **File**: McpServerToolCallContent.cs line 21
+- **Benefit**: Prevents breaking changes if hierarchy needs adjustment later
+
+### 2. Tool Approval renamed from Function Approval ✅
+- **Old**: FunctionApprovalRequestContent / FunctionApprovalResponseContent
+- **New**: ToolApprovalRequestContent / ToolApprovalResponseContent
+- **Benefit**: Extensible to other tool types beyond functions and MCP
+
+### 3. Constructors for both FCC and MCP ✅
+Both ToolApprovalRequestContent and ToolApprovalResponseContent have:
+- Type-safe constructors for FunctionCallContent
+- Type-safe constructors for McpServerToolCallContent
+- JsonConstructor accepting base ToolCallContent for future extensibility
+
+### 4. FunctionCallContent unsealed with InformationalOnly ✅
+- **Status**: FunctionCallContent is NOT sealed
+- **InformationalOnly property**: Present (line 61 in FunctionCallContent.cs)
+- **Benefit**: Allows custom tool call types to extend FCC (e.g., ShellToolCall)
+
+## Future-Proof Design ✅
+
+The current design supports future non-breaking moves:
+
+### Option 1: Move MCP under FCC (if needed later)
+\\\
+ToolCallContent
+├── FunctionCallContent
+│   └── McpServerToolCallContent  ← Can move here (non-breaking, gains IS-A FCC)
+\\\
+
+### Option 2: Introduce RemoteToolCallContent grouping
+\\\
+ToolCallContent
+├── FunctionCallContent
+├── RemoteToolCallContent         ← NEW, non-breaking
+│   ├── McpServerToolCallContent  ← Can move here
+│   ├── CodeInterpreterToolCallContent
+│   └── ImageGenerationToolCallContent
+\\\
+
+## Comparison with Concerns from PR #7276
+
+| Concern | Current Status | Assessment |
+|---------|----------------|------------|
+| McpServerToolCallContent should be sibling to FCC | ✅ Already implemented | Correct |
+| Rename FunctionApproval* to ToolApproval* | ✅ Already renamed | Correct |
+| ToolApproval should have ctors for FCC and MCP | ✅ Already has both | Correct |
+| FCC should be unsealed | ✅ Already unsealed | Correct |
+| FCC should have InformationalOnly | ✅ Already has property | Correct |
+| Design should allow future hierarchy changes | ✅ Flexible structure | Correct |
+
+## Recommendation
+
+✅ **The current API design is CORRECT and addresses all concerns from PR #7276.**
+
+No structural changes needed. The implementation already:
+1. Makes McpServerToolCallContent a sibling to FunctionCallContent
+2. Uses ToolApproval* naming (not FunctionApproval*)
+3. Provides type-safe constructors for both FCC and MCP
+4. Keeps FunctionCallContent extensible (unsealed + InformationalOnly)
+5. Allows future non-breaking hierarchy adjustments
+
+## Minor Refinements to Consider (Optional)
+
+These are NOT structural issues, just potential polish items:
+
+1. **HostedMcpServerTool.Name hardcoded to \"mcp\"**
+   - Consider if this prevents multiple MCP servers being distinguished
+   - Current: All MCP tools share Name=\"mcp\"
+   - Alternative: Name could be derived from ServerName or made configurable
+
+2. **McpServerToolCallContent.ServerName is nullable**
+   - ServerName is required in HostedMcpServerTool but nullable in content
+   - Consider if this should match (non-nullable)
+
+3. **Collections mutability**
+   - AllowedTools: IList<string>? (mutable)
+   - McpServerToolResultContent.Outputs: IList<AIContent> (mutable)
+   - Consider IReadOnlyList for immutability
+
+4. **Headers dictionary**
+   - Current: IDictionary<string, string>? (single value per header)
+   - HTTP supports multiple values: Consider IReadOnlyDictionary<string, IEnumerable<string>>

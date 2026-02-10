@@ -47,6 +47,39 @@ public class HostedMcpServerToolApprovalModeTests
     }
 
     [Fact]
+    public void Serialization_DerivedTypes_Roundtrips()
+    {
+        HostedMcpServerToolApprovalMode[] modes =
+        [
+            HostedMcpServerToolApprovalMode.AlwaysRequire,
+            HostedMcpServerToolApprovalMode.NeverRequire,
+            HostedMcpServerToolApprovalMode.RequireSpecific(["ToolA", "ToolB"], ["ToolC"]),
+        ];
+
+        // Verify each element roundtrips individually
+        foreach (var mode in modes)
+        {
+            var serialized = JsonSerializer.Serialize(mode, TestJsonSerializerContext.Default.HostedMcpServerToolApprovalMode);
+            var deserialized = JsonSerializer.Deserialize(serialized, TestJsonSerializerContext.Default.HostedMcpServerToolApprovalMode);
+            Assert.NotNull(deserialized);
+            Assert.Equal(mode.GetType(), deserialized.GetType());
+            Assert.Equal(mode, deserialized);
+        }
+
+        // Verify the array roundtrips
+        var serializedModes = JsonSerializer.Serialize(modes, TestJsonSerializerContext.Default.HostedMcpServerToolApprovalModeArray);
+        var deserializedModes = JsonSerializer.Deserialize<HostedMcpServerToolApprovalMode[]>(serializedModes, TestJsonSerializerContext.Default.HostedMcpServerToolApprovalModeArray);
+        Assert.NotNull(deserializedModes);
+        Assert.Equal(modes.Length, deserializedModes.Length);
+        for (int i = 0; i < deserializedModes.Length; i++)
+        {
+            Assert.NotNull(deserializedModes[i]);
+            Assert.Equal(modes[i].GetType(), deserializedModes[i].GetType());
+            Assert.Equal(modes[i], deserializedModes[i]);
+        }
+    }
+
+    [Fact]
     public void Equality_RequireSpecific_WorksAsExpected()
     {
         var mode1 = HostedMcpServerToolApprovalMode.RequireSpecific(["ToolA", "ToolB"], ["ToolC"]);

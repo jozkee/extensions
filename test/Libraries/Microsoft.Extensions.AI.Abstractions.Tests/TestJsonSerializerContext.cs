@@ -36,6 +36,7 @@ namespace Microsoft.Extensions.AI;
 [JsonSerializable(typeof(Guid))] // Used in Content tests
 [JsonSerializable(typeof(decimal))] // Used in Content tests
 [JsonSerializable(typeof(HostedMcpServerToolApprovalMode))]
+[JsonSerializable(typeof(HostedMcpServerToolApprovalMode[]))]
 [JsonSerializable(typeof(ChatResponseFormatTests.SomeType))]
 [JsonSerializable(typeof(ChatResponseFormatTests.TypeWithDisplayName))]
 [JsonSerializable(typeof(ResponseContinuationToken))]

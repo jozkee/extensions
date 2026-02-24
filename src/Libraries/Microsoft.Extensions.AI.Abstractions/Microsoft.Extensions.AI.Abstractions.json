@@ -1,5 +1,5 @@
 {
-  "Name": "Microsoft.Extensions.AI.Abstractions, Version=10.3.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
+  "Name": "Microsoft.Extensions.AI.Abstractions, Version=10.4.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
   "Types": [
     {
       "Type": "sealed class Microsoft.Extensions.AI.AdditionalPropertiesDictionary : Microsoft.Extensions.AI.AdditionalPropertiesDictionary<object?>",
@@ -1499,12 +1499,6 @@
           "Member": "Microsoft.Extensions.AI.CodeInterpreterToolResultContent.CodeInterpreterToolResultContent(string callId);",
           "Stage": "Experimental"
         }
-      ],
-      "Properties": [
-        {
-          "Member": "System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? Microsoft.Extensions.AI.CodeInterpreterToolResultContent.Outputs { get; set; }",
-          "Stage": "Experimental"
-        }
       ]
     },
     {
@@ -2560,12 +2554,6 @@
           "Member": "Microsoft.Extensions.AI.ImageGenerationToolResultContent.ImageGenerationToolResultContent(string callId);",
           "Stage": "Experimental"
         }
-      ],
-      "Properties": [
-        {
-          "Member": "System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? Microsoft.Extensions.AI.ImageGenerationToolResultContent.Outputs { get; set; }",
-          "Stage": "Experimental"
-        }
       ]
     },
     {
@@ -2716,12 +2704,6 @@
       "Methods": [
         {
           "Member": "Microsoft.Extensions.AI.McpServerToolResultContent.McpServerToolResultContent(string callId);",
-          "Stage": "Stable"
-        }
-      ],
-      "Properties": [
-        {
-          "Member": "System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? Microsoft.Extensions.AI.McpServerToolResultContent.Outputs { get; set; }",
           "Stage": "Stable"
         }
       ]
@@ -3322,6 +3304,10 @@
       "Properties": [
         {
           "Member": "string Microsoft.Extensions.AI.ToolResultContent.CallId { get; }",
+          "Stage": "Stable"
+        },
+        {
+          "Member": "System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? Microsoft.Extensions.AI.ToolResultContent.Outputs { get; set; }",
           "Stage": "Stable"
         }
       ]

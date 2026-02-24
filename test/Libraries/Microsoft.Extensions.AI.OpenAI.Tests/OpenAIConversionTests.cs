@@ -759,6 +759,52 @@ public class OpenAIConversionTests
     }
 
     [Fact]
+    public void AsOpenAIResponseItems_OutputsPreferredOverResult()
+    {
+        var frc = new FunctionResultContent("callid123", "should be ignored")
+        {
+            Outputs = [new TextContent("from outputs")],
+        };
+
+        List<ChatMessage> messages =
+        [
+            new(ChatRole.User, "Hello"),
+            new(ChatRole.Tool, [frc]),
+        ];
+
+        var convertedItems = messages.AsOpenAIResponseItems().ToArray();
+
+        Assert.Equal(2, convertedItems.Length);
+        FunctionCallOutputResponseItem m1 = Assert.IsAssignableFrom<FunctionCallOutputResponseItem>(convertedItems[1]);
+        Assert.Equal("callid123", m1.CallId);
+
+        // The output should come from Outputs, not Result.
+        Assert.Empty(m1.FunctionOutput);
+    }
+
+    [Fact]
+    public void AsOpenAIChatMessages_OutputsPreferredOverResult()
+    {
+        var frc = new FunctionResultContent("callid123", "should be ignored")
+        {
+            Outputs = [new TextContent("from outputs")],
+        };
+
+        List<ChatMessage> messages =
+        [
+            new(ChatRole.User, "Hello"),
+            new(ChatRole.Tool, [frc]),
+        ];
+
+        var convertedMessages = messages.AsOpenAIChatMessages().ToArray();
+
+        Assert.Equal(2, convertedMessages.Length);
+        ToolChatMessage m1 = Assert.IsType<ToolChatMessage>(convertedMessages[1], exactMatch: false);
+        Assert.Equal("callid123", m1.ToolCallId);
+        Assert.Equal("from outputs", Assert.Single(m1.Content).Text);
+    }
+
+    [Fact]
     public void AsOpenAIResponseItems_RoundtripsRawRepresentation()
     {
         List<ChatMessage> messages =

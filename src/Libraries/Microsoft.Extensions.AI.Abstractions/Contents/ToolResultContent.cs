@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using Microsoft.Shared.Diagnostics;
 
@@ -41,4 +42,9 @@ public class ToolResultContent : AIContent
     /// <see cref="ToolCallContent.CallId"/> value.
     /// </remarks>
     public string CallId { get; }
+
+    /// <summary>
+    /// Gets or sets the output contents of the tool call.
+    /// </summary>
+    public IList<AIContent>? Outputs { get; set; }
 }

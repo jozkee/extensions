@@ -5181,6 +5181,131 @@ public class OpenAIResponseClientTests
     }
 
     [Fact]
+    public async Task ToolCallResult_OutputsPreferredOverResult_SerializesCorrectly()
+    {
+        // When both Outputs and Result are set, Outputs should be preferred.
+        const string Input = """
+            {
+                "model":"gpt-4o-mini",
+                "input":[
+                    {
+                        "type":"message",
+                        "role":"user",
+                        "content":[{"type":"input_text","text":"test"}]
+                    },
+                    {
+                        "type":"function_call_output",
+                        "call_id":"call_outputs",
+                        "output":[{"type":"input_text","text":"from outputs"}]
+                    }
+                ]
+            }
+            """;
+
+        const string Output = """
+            {
+              "id":"resp_outputs",
+              "object":"response",
+              "created_at":1741892091,
+              "status":"completed",
+              "model":"gpt-4o-mini",
+              "output":[
+                {
+                  "type":"message",
+                  "id":"msg_outputs",
+                  "status":"completed",
+                  "role":"assistant",
+                  "content":[{"type":"output_text","text":"Outputs used","annotations":[]}]
+                }
+              ]
+            }
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateResponseClient(httpClient, "gpt-4o-mini");
+
+        var frc = new FunctionResultContent("call_outputs", "this should be ignored")
+        {
+            Outputs = [new TextContent("from outputs")],
+        };
+
+        var response = await client.GetResponseAsync([
+            new ChatMessage(ChatRole.User, "test"),
+            new ChatMessage(ChatRole.Tool, [frc])
+        ]);
+
+        Assert.NotNull(response);
+        Assert.Equal("Outputs used", response.Text);
+    }
+
+    [Fact]
+    public async Task ToolCallResult_OutputsMixedContent_SerializesCorrectly()
+    {
+        // Outputs set directly on the property (not via Result) should serialize mixed content.
+        const string Input = """
+            {
+                "model":"gpt-4o-mini",
+                "input":[
+                    {
+                        "type":"message",
+                        "role":"user",
+                        "content":[{"type":"input_text","text":"test"}]
+                    },
+                    {
+                        "type":"function_call_output",
+                        "call_id":"call_outputs_mixed",
+                        "output":[
+                            {"type":"input_text","text":"Here is the image: "},
+                            {"type":"input_image","image_url":"https://example.com/photo.png"}
+                        ]
+                    }
+                ]
+            }
+            """;
+
+        const string Output = """
+            {
+              "id":"resp_outputs_mixed",
+              "object":"response",
+              "created_at":1741892091,
+              "status":"completed",
+              "model":"gpt-4o-mini",
+              "output":[
+                {
+                  "type":"message",
+                  "id":"msg_outputs_mixed",
+                  "status":"completed",
+                  "role":"assistant",
+                  "content":[{"type":"output_text","text":"Mixed outputs processed","annotations":[]}]
+                }
+              ]
+            }
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateResponseClient(httpClient, "gpt-4o-mini");
+
+        var frc = new FunctionResultContent("call_outputs_mixed", result: null)
+        {
+            Outputs =
+            [
+                new TextContent("Here is the image: "),
+                new UriContent(new Uri("https://example.com/photo.png"), "image/png"),
+            ],
+        };
+
+        var response = await client.GetResponseAsync([
+            new ChatMessage(ChatRole.User, "test"),
+            new ChatMessage(ChatRole.Tool, [frc])
+        ]);
+
+        Assert.NotNull(response);
+        Assert.Equal("Mixed outputs processed", response.Text);
+    }
+
+    [Fact]
     public async Task ResponseWithEndUserId_IncludesInAdditionalProperties()
     {
         const string Input = """

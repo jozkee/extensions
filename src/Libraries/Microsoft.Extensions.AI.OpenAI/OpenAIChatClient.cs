@@ -175,20 +175,36 @@ internal sealed partial class OpenAIChatClient : IChatClient
                 {
                     if (item is FunctionResultContent resultContent)
                     {
-                        string? result = resultContent.Result as string;
-                        if (result is null && resultContent.Result is not null)
+                        if (resultContent.Outputs is { Count: > 0 } outputs)
                         {
-                            try
+                            var parts = new List<ChatMessageContentPart>();
+                            foreach (var output in outputs)
                             {
-                                result = JsonSerializer.Serialize(resultContent.Result, AIJsonUtilities.DefaultOptions.GetTypeInfo(typeof(object)));
+                                if (ToChatMessageContentPart(output) is { } part)
+                                {
+                                    parts.Add(part);
+                                }
                             }
-                            catch (NotSupportedException)
-                            {
-                                // If the type can't be serialized, skip it.
-                            }
-                        }
 
-                        yield return new ToolChatMessage(resultContent.CallId, result ?? string.Empty);
+                            yield return new ToolChatMessage(resultContent.CallId, parts);
+                        }
+                        else
+                        {
+                            string? result = resultContent.Result as string;
+                            if (result is null && resultContent.Result is not null)
+                            {
+                                try
+                                {
+                                    result = JsonSerializer.Serialize(resultContent.Result, AIJsonUtilities.DefaultOptions.GetTypeInfo(typeof(object)));
+                                }
+                                catch (NotSupportedException)
+                                {
+                                    // If the type can't be serialized, skip it.
+                                }
+                            }
+
+                            yield return new ToolChatMessage(resultContent.CallId, result ?? string.Empty);
+                        }
                     }
                 }
             }

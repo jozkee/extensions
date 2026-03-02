@@ -12,6 +12,7 @@ using OpenAI.Responses;
 using Xunit;
 
 #pragma warning disable OPENAI001 // Experimental OpenAI APIs
+#pragma warning disable MEAI001 // Experimental AI APIs
 
 namespace Microsoft.Extensions.AI;
 
@@ -719,5 +720,160 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
             }
         });
         Assert.Contains("encrypted", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [ConditionalFact]
+    public async Task ShellTool_WithApproval_NonStreaming_ApprovedExecutesAndReturnsResult()
+    {
+        SkipIfNotEnabled();
+
+        var shellTool = new ApprovalRequiredAIFunction(new ShellTool());
+
+        using var chatClient = new FunctionInvokingChatClient(ChatClient);
+
+        List<ChatMessage> input = [new ChatMessage(ChatRole.User, "Use the local_shell tool to run the command 'echo hello_from_shell'. Return the exact output text.")];
+
+        ChatOptions chatOptions = new()
+        {
+            Tools = [shellTool],
+        };
+
+        // First request: should get an approval request back
+        var response = await chatClient.GetResponseAsync(input, chatOptions);
+
+        var approvalRequests = response.Messages
+            .SelectMany(m => m.Contents)
+            .OfType<ToolApprovalRequestContent>()
+            .ToList();
+
+        Assert.NotEmpty(approvalRequests);
+
+        // Approve all requests
+        input.AddRange(response.Messages);
+        input.Add(new ChatMessage(ChatRole.Tool,
+            approvalRequests.Select(c => c.CreateResponse(true)).ToArray()));
+
+        // Second request: after approval, function executes and we get the result
+        var finalResponse = await chatClient.GetResponseAsync(input, chatOptions);
+
+        Assert.NotNull(finalResponse);
+        Assert.Contains("hello_from_shell", finalResponse.Text);
+    }
+
+    [ConditionalFact]
+    public async Task ShellTool_WithApproval_NonStreaming_DeniedDoesNotExecute()
+    {
+        SkipIfNotEnabled();
+
+        var shellTool = new ApprovalRequiredAIFunction(new ShellTool());
+
+        using var chatClient = new FunctionInvokingChatClient(ChatClient);
+
+        List<ChatMessage> input = [new ChatMessage(ChatRole.User, "Use the local_shell tool to run the command 'echo denied_test'. Return the exact output text.")];
+
+        ChatOptions chatOptions = new()
+        {
+            Tools = [shellTool],
+        };
+
+        // First request: should get an approval request back
+        var response = await chatClient.GetResponseAsync(input, chatOptions);
+
+        var approvalRequests = response.Messages
+            .SelectMany(m => m.Contents)
+            .OfType<ToolApprovalRequestContent>()
+            .ToList();
+
+        Assert.NotEmpty(approvalRequests);
+
+        // Deny all requests
+        input.AddRange(response.Messages);
+        input.Add(new ChatMessage(ChatRole.Tool,
+            approvalRequests.Select(c => c.CreateResponse(false)).ToArray()));
+
+        // Second request: after denial, the model should respond without executing
+        var finalResponse = await chatClient.GetResponseAsync(input, chatOptions);
+
+        Assert.NotNull(finalResponse);
+
+        // Verify no function result contains actual shell output (denial produces a denial message, not shell output)
+        var functionResults = finalResponse.Messages
+            .SelectMany(m => m.Contents)
+            .OfType<FunctionResultContent>()
+            .ToList();
+
+        foreach (var fr in functionResults)
+        {
+            string? resultText = fr.Result?.ToString() ?? string.Empty;
+            Assert.DoesNotContain("Exit Code:", resultText);
+        }
+    }
+
+    [ConditionalFact]
+    public async Task ShellTool_WithApproval_Streaming_ApprovedExecutesAndReturnsResult()
+    {
+        SkipIfNotEnabled();
+
+        var shellTool = new ApprovalRequiredAIFunction(new ShellTool());
+
+        using var chatClient = new FunctionInvokingChatClient(ChatClient);
+
+        List<ChatMessage> input = [new ChatMessage(ChatRole.User, "Use the local_shell tool to run the command 'echo streaming_shell_test'. Return the exact output text.")];
+
+        ChatOptions chatOptions = new()
+        {
+            Tools = [shellTool],
+        };
+
+        // First request (streaming): should get an approval request back
+        var response = await chatClient.GetStreamingResponseAsync(input, chatOptions).ToChatResponseAsync();
+
+        var approvalRequests = response.Messages
+            .SelectMany(m => m.Contents)
+            .OfType<ToolApprovalRequestContent>()
+            .ToList();
+
+        Assert.NotEmpty(approvalRequests);
+
+        // Approve all requests
+        input.AddRange(response.Messages);
+        input.Add(new ChatMessage(ChatRole.Tool,
+            approvalRequests.Select(c => c.CreateResponse(true)).ToArray()));
+
+        // Second request (streaming): after approval, function executes and we get the result
+        var finalResponse = await chatClient.GetStreamingResponseAsync(input, chatOptions).ToChatResponseAsync();
+
+        Assert.NotNull(finalResponse);
+        Assert.Contains("streaming_shell_test", finalResponse.Text);
+    }
+
+    [ConditionalFact]
+    public async Task ShellTool_WithoutApproval_ExecutesDirectly()
+    {
+        SkipIfNotEnabled();
+
+        var shellTool = new ShellTool();
+
+        using var chatClient = new FunctionInvokingChatClient(ChatClient);
+
+        ChatOptions chatOptions = new()
+        {
+            Tools = [shellTool],
+        };
+
+        var response = await chatClient.GetResponseAsync(
+            "Use the local_shell tool to run the command 'echo direct_execution'. Return the exact output text.",
+            chatOptions);
+
+        Assert.NotNull(response);
+        Assert.Contains("direct_execution", response.Text);
+
+        // Should have no approval requests since ShellTool wasn't wrapped
+        var approvalRequests = response.Messages
+            .SelectMany(m => m.Contents)
+            .OfType<ToolApprovalRequestContent>()
+            .ToList();
+
+        Assert.Empty(approvalRequests);
     }
 }

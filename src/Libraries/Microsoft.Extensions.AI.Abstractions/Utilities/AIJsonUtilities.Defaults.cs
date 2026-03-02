@@ -55,6 +55,8 @@ public static partial class AIJsonUtilities
         AddAIContentType(options, typeof(CodeInterpreterToolResultContent), typeDiscriminatorId: "codeInterpreterToolResult", checkBuiltIn: false);
         AddAIContentType(options, typeof(ImageGenerationToolCallContent), typeDiscriminatorId: "imageGenerationToolCall", checkBuiltIn: false);
         AddAIContentType(options, typeof(ImageGenerationToolResultContent), typeDiscriminatorId: "imageGenerationToolResult", checkBuiltIn: false);
+        AddAIContentType(options, typeof(ShellCallContent), typeDiscriminatorId: "shellCall", checkBuiltIn: false);
+        AddAIContentType(options, typeof(ShellResultContent), typeDiscriminatorId: "shellResult", checkBuiltIn: false);
 
         // Also register the experimental types as derived types of ToolCallContent/ToolResultContent.
         AddDerivedContentType(options, typeof(ToolCallContent), typeof(CodeInterpreterToolCallContent), "codeInterpreterToolCall");
@@ -140,6 +142,9 @@ public static partial class AIJsonUtilities
     [JsonSerializable(typeof(CodeInterpreterToolResultContent))]
     [JsonSerializable(typeof(ImageGenerationToolCallContent))]
     [JsonSerializable(typeof(ImageGenerationToolResultContent))]
+    [JsonSerializable(typeof(ShellCallContent))]
+    [JsonSerializable(typeof(ShellResultContent))]
+    [JsonSerializable(typeof(ShellCommandOutput))]
     [JsonSerializable(typeof(ResponseContinuationToken))]
 
     // IEmbeddingGenerator

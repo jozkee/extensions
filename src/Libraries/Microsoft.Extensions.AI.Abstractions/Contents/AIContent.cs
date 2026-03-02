@@ -32,6 +32,8 @@ namespace Microsoft.Extensions.AI;
 // [JsonDerivedType(typeof(CodeInterpreterToolResultContent), typeDiscriminator: "codeInterpreterToolResult")]
 // [JsonDerivedType(typeof(ImageGenerationToolCallContent), typeDiscriminator: "imageGenerationToolCall")]
 // [JsonDerivedType(typeof(ImageGenerationToolResultContent), typeDiscriminator: "imageGenerationToolResult")]
+// [JsonDerivedType(typeof(ShellCallContent), typeDiscriminator: "shellCall")]
+// [JsonDerivedType(typeof(ShellResultContent), typeDiscriminator: "shellResult")]
 
 public class AIContent
 {

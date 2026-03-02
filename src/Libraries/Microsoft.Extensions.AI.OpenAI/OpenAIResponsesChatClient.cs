@@ -55,6 +55,36 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
     private static readonly PropertyInfo? _inputImageUrlProperty =
         Type.GetType("OpenAI.Responses.InternalItemContentInputImage, OpenAI")?.GetProperty("ImageUrl");
 
+    // The OpenAI library doesn't yet expose local shell types as public, so we access them via reflection.
+    // Replace with direct usage once public types are available.
+    [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)]
+    private static readonly Type? _localShellToolType =
+        Type.GetType("OpenAI.Responses.InternalLocalShellTool, OpenAI");
+
+    private static readonly Type? _localShellToolCallItemResourceType =
+        Type.GetType("OpenAI.Responses.InternalLocalShellToolCallItemResource, OpenAI");
+
+    private static readonly PropertyInfo? _shellCallIdProperty =
+        Type.GetType("OpenAI.Responses.InternalLocalShellToolCallItemResource, OpenAI")?.GetProperty("CallId");
+
+    private static readonly PropertyInfo? _shellCallStatusProperty =
+        Type.GetType("OpenAI.Responses.InternalLocalShellToolCallItemResource, OpenAI")?.GetProperty("Status");
+
+    private static readonly PropertyInfo? _shellCallActionProperty =
+        Type.GetType("OpenAI.Responses.InternalLocalShellToolCallItemResource, OpenAI")?.GetProperty("Action");
+
+    private static readonly PropertyInfo? _shellActionCommandProperty =
+        Type.GetType("OpenAI.Responses.InternalLocalShellExecAction, OpenAI")?.GetProperty("Command");
+
+    private static readonly PropertyInfo? _shellActionTimeoutMsProperty =
+        Type.GetType("OpenAI.Responses.InternalLocalShellExecAction, OpenAI")?.GetProperty("TimeoutMs");
+
+    private static readonly Type? _localShellToolCallOutputItemResourceType =
+        Type.GetType("OpenAI.Responses.InternalLocalShellToolCallOutputItemResource, OpenAI");
+
+    private static readonly PropertyInfo? _shellOutputProperty =
+        Type.GetType("OpenAI.Responses.InternalLocalShellToolCallOutputItemResource, OpenAI")?.GetProperty("Output");
+
     /// <summary>Metadata about the client.</summary>
     private readonly ChatClientMetadata _metadata;
 
@@ -261,7 +291,19 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                     break;
 
                 default:
-                    message.Contents.Add(new() { RawRepresentation = outputItem });
+                    if (TryCreateShellCallContent(outputItem) is { } shellCall)
+                    {
+                        message.Contents.Add(shellCall);
+                    }
+                    else if (TryCreateShellResultContent(outputItem) is { } shellResult)
+                    {
+                        message.Contents.Add(shellResult);
+                    }
+                    else
+                    {
+                        message.Contents.Add(new() { RawRepresentation = outputItem });
+                    }
+
                     break;
             }
         }
@@ -533,7 +575,19 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
 
                         // For everything else, yield an AIContent for the ResponseItem.
                         default:
-                            yield return CreateUpdate(new AIContent { RawRepresentation = outputItemDoneUpdate.Item });
+                            if (TryCreateShellCallContent(outputItemDoneUpdate.Item) is { } streamingShellCall)
+                            {
+                                yield return CreateUpdate(streamingShellCall);
+                            }
+                            else if (TryCreateShellResultContent(outputItemDoneUpdate.Item) is { } streamingShellResult)
+                            {
+                                yield return CreateUpdate(streamingShellResult);
+                            }
+                            else
+                            {
+                                yield return CreateUpdate(new AIContent { RawRepresentation = outputItemDoneUpdate.Item });
+                            }
+
                             break;
                     }
                     break;
@@ -727,6 +781,9 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                 }
 
                 return responsesMcpTool;
+
+            case ShellTool or HostedShellTool when _localShellToolType is not null:
+                return Activator.CreateInstance(_localShellToolType) as ResponseTool;
 
             default:
                 return null;
@@ -1453,6 +1510,52 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                 }).OfType<AIContent>().ToList() : null,
             RawRepresentation = cicri,
         };
+
+    /// <summary>Tries to create a <see cref="ShellCallContent"/> from a <see cref="ResponseItem"/> if it is an internal shell tool call item.</summary>
+    private static ShellCallContent? TryCreateShellCallContent(ResponseItem responseItem)
+    {
+        if (_localShellToolCallItemResourceType is null || !_localShellToolCallItemResourceType.IsInstanceOfType(responseItem))
+        {
+            return null;
+        }
+
+        string? callId = _shellCallIdProperty?.GetValue(responseItem) as string;
+        string? status = _shellCallStatusProperty?.GetValue(responseItem)?.ToString();
+        object? action = _shellCallActionProperty?.GetValue(responseItem);
+
+        IList<string>? commands = null;
+        int? timeoutMs = null;
+        if (action is not null)
+        {
+            commands = _shellActionCommandProperty?.GetValue(action) as IList<string>;
+            timeoutMs = _shellActionTimeoutMsProperty?.GetValue(action) as int?;
+        }
+
+        return new ShellCallContent(callId ?? responseItem.Id, "local_shell")
+        {
+            Commands = commands,
+            TimeoutMs = timeoutMs,
+            Status = status,
+            RawRepresentation = responseItem,
+        };
+    }
+
+    /// <summary>Tries to create a <see cref="ShellResultContent"/> from a <see cref="ResponseItem"/> if it is an internal shell tool call output item.</summary>
+    private static ShellResultContent? TryCreateShellResultContent(ResponseItem responseItem)
+    {
+        if (_localShellToolCallOutputItemResourceType is null || !_localShellToolCallOutputItemResourceType.IsInstanceOfType(responseItem))
+        {
+            return null;
+        }
+
+        string? output = _shellOutputProperty?.GetValue(responseItem) as string;
+
+        return new ShellResultContent(responseItem.Id)
+        {
+            Output = output is not null ? [new ShellCommandOutput { Stdout = output }] : null,
+            RawRepresentation = responseItem,
+        };
+    }
 
     private static void AddImageGenerationContents(ImageGenerationCallResponseItem outputItem, CreateResponseOptions? options, IList<AIContent> contents)
     {

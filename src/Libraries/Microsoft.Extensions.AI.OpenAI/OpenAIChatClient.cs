@@ -201,6 +201,8 @@ internal sealed partial class OpenAIChatClient : IChatClient
                 List<ChatMessageContentPart>? contentParts = null;
                 List<ChatToolCall>? toolCalls = null;
                 string? refusal = null;
+                StringBuilder? reasoningText = null;
+                string? reasoningFieldName = null;
                 foreach (var content in input.Contents)
                 {
                     switch (content)
@@ -213,6 +215,18 @@ internal sealed partial class OpenAIChatClient : IChatClient
                             (toolCalls ??= []).Add(
                                 ChatToolCall.CreateFunctionToolCall(fc.CallId, fc.Name, new(JsonSerializer.SerializeToUtf8Bytes(
                                     fc.Arguments, AIJsonUtilities.DefaultOptions.GetTypeInfo(typeof(IDictionary<string, object?>))))));
+                            break;
+
+                        case TextReasoningContent trc:
+                            _ = (reasoningText ??= new()).Append(trc.Text);
+                            if (reasoningFieldName is null && trc.AdditionalProperties is { } props)
+                            {
+                                reasoningFieldName =
+                                    props.ContainsKey("reasoning") ? "reasoning" :
+                                    props.ContainsKey("reasoning_content") ? "reasoning_content" :
+                                    null;
+                            }
+
                             break;
 
                         default:
@@ -246,6 +260,15 @@ internal sealed partial class OpenAIChatClient : IChatClient
 
                 message.ParticipantName = SanitizeAuthorName(input.AuthorName);
                 message.Refusal = refusal;
+
+                // Inject reasoning content from OpenAI-compatible endpoints (e.g. DeepSeek, vLLM, OpenRouter)
+                // back onto the wire using the original field name so it round-trips correctly.
+                if (reasoningText is not null)
+                {
+#pragma warning disable SCME0001 // JsonPatch is experimental
+                    PatchReasoningContent(ref message.Patch, reasoningText.ToString(), reasoningFieldName ?? "reasoning");
+#pragma warning restore SCME0001
+                }
 
                 yield return message;
             }
@@ -380,9 +403,12 @@ internal sealed partial class OpenAIChatClient : IChatClient
 
             // Check for reasoning content from OpenAI-compatible endpoints (e.g. DeepSeek, vLLM, OpenRouter)
             // that surface it via non-standard fields in the response JSON.
-            if (TryGetReasoningDelta(update, out string? reasoningText))
+            if (TryGetReasoningDelta(update, out string? reasoningText, out string? reasoningFieldName))
             {
-                responseUpdate.Contents.Add(new TextReasoningContent(reasoningText));
+                responseUpdate.Contents.Add(new TextReasoningContent(reasoningText)
+                {
+                    AdditionalProperties = new() { [reasoningFieldName!] = reasoningText },
+                });
             }
 
             if (update.OutputAudioUpdate is { } audioUpdate)
@@ -506,9 +532,12 @@ internal sealed partial class OpenAIChatClient : IChatClient
 
         // Check for reasoning content from OpenAI-compatible endpoints (e.g. DeepSeek, vLLM, OpenRouter)
         // that surface it via non-standard fields in the response JSON.
-        if (TryGetReasoningMessage(openAICompletion, out string? reasoningText))
+        if (TryGetReasoningMessage(openAICompletion, out string? reasoningText, out string? reasoningFieldName))
         {
-            returnMessage.Contents.Add(new TextReasoningContent(reasoningText));
+            returnMessage.Contents.Add(new TextReasoningContent(reasoningText)
+            {
+                AdditionalProperties = new() { [reasoningFieldName!] = reasoningText },
+            });
         }
 
         // Output audio is handled separately from message content parts.
@@ -854,12 +883,53 @@ internal sealed partial class OpenAIChatClient : IChatClient
 
 #pragma warning disable SCME0001 // JsonPatch is experimental
     /// <summary>Tries to extract reasoning text from a streaming chat completion update's Patch.</summary>
-    private static bool TryGetReasoningDelta(StreamingChatCompletionUpdate update, [NotNullWhen(true)] out string? reasoningText)
-        => update.Patch.TryGetValue("$.choices[0].delta.reasoning_content"u8, out reasoningText) && reasoningText is not null;
+    /// <remarks>
+    /// Checks <c>reasoning_content</c> first (DeepSeek, Fireworks, xAI) then falls back to
+    /// <c>reasoning</c> (vLLM, Together, Groq, OpenRouter) since providers use different field names.
+    /// </remarks>
+    /// <summary>Tries to extract reasoning text from a streaming chat completion's Patch.</summary>
+    private static bool TryGetReasoningDelta(StreamingChatCompletionUpdate update, [NotNullWhen(true)] out string? reasoningText, out string? fieldName)
+    {
+        if (update.Patch.TryGetValue("$.choices[0].delta.reasoning_content"u8, out reasoningText) && reasoningText is not null)
+        {
+            fieldName = "reasoning_content";
+            return true;
+        }
+
+        if (update.Patch.TryGetValue("$.choices[0].delta.reasoning"u8, out reasoningText) && reasoningText is not null)
+        {
+            fieldName = "reasoning";
+            return true;
+        }
+
+        fieldName = null;
+        return false;
+    }
 
     /// <summary>Tries to extract reasoning text from a non-streaming chat completion's Patch.</summary>
-    private static bool TryGetReasoningMessage(ChatCompletion completion, [NotNullWhen(true)] out string? reasoningText)
-        => completion.Patch.TryGetValue("$.choices[0].message.reasoning_content"u8, out reasoningText) && reasoningText is not null;
+    private static bool TryGetReasoningMessage(ChatCompletion completion, [NotNullWhen(true)] out string? reasoningText, out string? fieldName)
+    {
+        if (completion.Patch.TryGetValue("$.choices[0].message.reasoning_content"u8, out reasoningText) && reasoningText is not null)
+        {
+            fieldName = "reasoning_content";
+            return true;
+        }
+
+        if (completion.Patch.TryGetValue("$.choices[0].message.reasoning"u8, out reasoningText) && reasoningText is not null)
+        {
+            fieldName = "reasoning";
+            return true;
+        }
+
+        fieldName = null;
+        return false;
+    }
+
+    /// <summary>Sets the reasoning content field in <paramref name="patch"/> using the specified <paramref name="fieldName"/>.</summary>
+    private static void PatchReasoningContent(ref JsonPatch patch, string reasoningContent, string fieldName)
+    {
+        patch.Set(fieldName == "reasoning" ? "$.reasoning"u8 : "$.reasoning_content"u8, reasoningContent);
+    }
 #pragma warning restore SCME0001
 
     private const string InvalidAuthorNamePattern = @"[^a-zA-Z0-9_]+";

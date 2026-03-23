@@ -1868,8 +1868,10 @@ public class OpenAIChatClientTests
         }));
     }
 
-    [Fact]
-    public async Task ReasoningContent_NonStreaming_SurfacedAsTextReasoningContent()
+    [Theory]
+    [InlineData("reasoning_content")] // DeepSeek, Fireworks, xAI
+    [InlineData("reasoning")]         // vLLM, Together, Groq, OpenRouter
+    public async Task ReasoningContent_NonStreaming_SurfacedAsTextReasoningContent(string reasoningFieldName)
     {
         const string Input = """
             {
@@ -1878,7 +1880,7 @@ public class OpenAIChatClientTests
             }
             """;
 
-        const string Output = """
+        string output = $$$"""
             {
               "id": "c48a440c7dd64389b7fbe908e006ba3d",
               "object": "chat.completion",
@@ -1890,7 +1892,7 @@ public class OpenAIChatClientTests
                   "message": {
                     "role": "assistant",
                     "content": "9.8 is larger.",
-                    "reasoning_content": "We just compare decimals: 9.11 vs 9.8. 9.8 > 9.11. Answer briefly."
+                    "{{{reasoningFieldName}}}": "We just compare decimals: 9.11 vs 9.8. 9.8 > 9.11. Answer briefly."
                   },
                   "finish_reason": "stop"
                 }
@@ -1903,7 +1905,7 @@ public class OpenAIChatClientTests
             }
             """;
 
-        using VerbatimHttpHandler handler = new(Input, Output);
+        using VerbatimHttpHandler handler = new(Input, output);
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
 
@@ -1914,15 +1916,19 @@ public class OpenAIChatClientTests
         var reasoning = message.Contents.OfType<TextReasoningContent>().Single();
         Assert.Equal("We just compare decimals: 9.11 vs 9.8. 9.8 > 9.11. Answer briefly.", reasoning.Text);
 
+        // Verify the original field name is preserved as a key for outbound roundtrip
+        Assert.True(reasoning.AdditionalProperties?.ContainsKey(reasoningFieldName));
+        Assert.Equal(reasoning.Text, reasoning.AdditionalProperties?[reasoningFieldName]);
+
         var text = message.Contents.OfType<TextContent>().Single();
         Assert.Equal("9.8 is larger.", text.Text);
     }
 
-    [Fact]
-    public async Task ReasoningContent_Streaming_SurfacedAsTextReasoningContent()
+    [Theory]
+    [InlineData("reasoning_content")] // DeepSeek, Fireworks, xAI
+    [InlineData("reasoning")]         // vLLM, Together, Groq, OpenRouter
+    public async Task ReasoningContent_Streaming_SurfacedAsTextReasoningContent(string reasoningFieldName)
     {
-        // Streaming format captured from Azure gpt-oss-120b. Reasoning chunks have reasoning_content with content:null,
-        // then content chunks have content with reasoning_content:null.
         const string Input = """
             {
                 "messages":[{"role":"user","content":"hello"}],
@@ -1932,20 +1938,20 @@ public class OpenAIChatClientTests
             }
             """;
 
-        const string Output = """
-            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"role":"assistant","content":"","reasoning_content":null},"finish_reason":null}]}
+        string output = $$$"""
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"role":"assistant","content":"","{{{reasoningFieldName}}}":null},"finish_reason":null}]}
 
-            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":null,"reasoning_content":"User asks"},"finish_reason":null}]}
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":null,"{{{reasoningFieldName}}}":"User asks"},"finish_reason":null}]}
 
-            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":null,"reasoning_content":": which"},"finish_reason":null}]}
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":null,"{{{reasoningFieldName}}}":": which"},"finish_reason":null}]}
 
-            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":null,"reasoning_content":" is larger."},"finish_reason":null}]}
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":null,"{{{reasoningFieldName}}}":" is larger."},"finish_reason":null}]}
 
-            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":"9","reasoning_content":null},"finish_reason":null}]}
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":"9","{{{reasoningFieldName}}}":null},"finish_reason":null}]}
 
-            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":".8 is larger.","reasoning_content":null},"finish_reason":null}]}
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":".8 is larger.","{{{reasoningFieldName}}}":null},"finish_reason":null}]}
 
-            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":null,"reasoning_content":null},"finish_reason":"stop"}]}
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":null,"{{{reasoningFieldName}}}":null},"finish_reason":"stop"}]}
 
             data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[],"usage":{"completion_tokens":46,"prompt_tokens":84,"total_tokens":130}}
 
@@ -1953,7 +1959,7 @@ public class OpenAIChatClientTests
 
             """;
 
-        using VerbatimHttpHandler handler = new(Input, Output);
+        using VerbatimHttpHandler handler = new(Input, output);
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
 
@@ -1963,12 +1969,189 @@ public class OpenAIChatClientTests
             updates.Add(update);
         }
 
-        // Verify reasoning content was captured from the reasoning_content deltas
+        // Verify reasoning content was captured from the reasoning deltas
         string reasoningText = string.Concat(updates.SelectMany(u => u.Contents).OfType<TextReasoningContent>().Select(r => r.Text));
         Assert.Equal("User asks: which is larger.", reasoningText);
 
+        // Verify the field name is stored as the key on the first reasoning chunk
+        var firstReasoning = updates.SelectMany(u => u.Contents).OfType<TextReasoningContent>().First();
+        Assert.True(firstReasoning.AdditionalProperties?.ContainsKey(reasoningFieldName));
+
+        // Verify the field name key survives coalescing into a ChatResponse
+        var coalesced = updates.ToChatResponse();
+        var coalescedReasoning = coalesced.Messages.SelectMany(m => m.Contents).OfType<TextReasoningContent>().First();
+        Assert.True(coalescedReasoning.AdditionalProperties?.ContainsKey(reasoningFieldName));
+
+        // Coalescing clones AdditionalProperties from the first chunk only,
+        // so the value is the first chunk's text, not the full concatenation.
+        Assert.Equal("User asks", (string?)coalescedReasoning.AdditionalProperties?[reasoningFieldName]);
+
         // Verify regular content was also captured from the content deltas
         Assert.Equal("9.8 is larger.", string.Concat(updates.Select(u => u.Text)));
+    }
+
+    [Theory]
+    [InlineData("reasoning_content")]
+    [InlineData("reasoning")]
+    public async Task ReasoningContent_OutboundPayload_UsesOriginalFieldName(string reasoningFieldName)
+    {
+        string input = $$$"""
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "What's the weather?"
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "Let me check.",
+                        "{{{reasoningFieldName}}}": "The user wants the weather.",
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "GetWeather",
+                                    "arguments": "{\"location\":\"Paris\"}"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "role": "tool",
+                        "tool_call_id": "call_1",
+                        "content": "72\u00b0F and sunny"
+                    }
+                ],
+                "model": "gpt-oss-120b"
+            }
+            """;
+
+        const string Output = """
+            {
+              "id": "resp2",
+              "object": "chat.completion",
+              "created": 1770959477,
+              "model": "gpt-oss-120b",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "It's 72°F and sunny in Paris." },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70 }
+            }
+            """;
+
+        using VerbatimHttpHandler handler = new(input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
+
+        // Build a multi-turn conversation where the assistant message has reasoning content
+        // with the field name stored in AdditionalProperties (as produced by inbound extraction).
+        List<ChatMessage> messages =
+        [
+            new(ChatRole.User, "What's the weather?"),
+            new(ChatRole.Assistant,
+            [
+                new TextReasoningContent("The user wants the weather.")
+                {
+                    AdditionalProperties = new() { [reasoningFieldName] = "The user wants the weather." },
+                },
+                new TextContent("Let me check."),
+                new FunctionCallContent("call_1", "GetWeather", arguments: new Dictionary<string, object?> { ["location"] = "Paris" }),
+            ]),
+            new(ChatRole.Tool, [new FunctionResultContent("call_1", "72°F and sunny")]),
+        ];
+
+        // VerbatimHttpHandler asserts the request body matches `input` via JsonNode.DeepEquals,
+        // which verifies the outbound JSON uses the correct reasoning field name.
+        var response = await client.GetResponseAsync(messages);
+        Assert.NotNull(response);
+        Assert.Equal("It's 72°F and sunny in Paris.", response.Text);
+    }
+
+    [Theory]
+    [InlineData("reasoning_content")]
+    [InlineData("reasoning")]
+    public async Task ReasoningContent_OutboundStreamingPayload_UsesOriginalFieldName(string reasoningFieldName)
+    {
+        string input = $$$"""
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "What's the weather?"
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "Let me check.",
+                        "{{{reasoningFieldName}}}": "The user wants the weather.",
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "GetWeather",
+                                    "arguments": "{\"location\":\"Paris\"}"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "role": "tool",
+                        "tool_call_id": "call_1",
+                        "content": "72\u00b0F and sunny"
+                    }
+                ],
+                "model": "gpt-oss-120b",
+                "stream": true,
+                "stream_options": { "include_usage": true }
+            }
+            """;
+
+        const string Output = """
+            data: {"id":"resp2","object":"chat.completion.chunk","created":1770959477,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"role":"assistant","content":"It's 72"},"finish_reason":null}]}
+
+            data: {"id":"resp2","object":"chat.completion.chunk","created":1770959477,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":"°F and sunny in Paris."},"finish_reason":null}]}
+
+            data: {"id":"resp2","object":"chat.completion.chunk","created":1770959477,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+            data: {"id":"resp2","object":"chat.completion.chunk","created":1770959477,"model":"gpt-oss-120b","choices":[],"usage":{"prompt_tokens":50,"completion_tokens":20,"total_tokens":70}}
+
+            data: [DONE]
+
+            """;
+
+        using VerbatimHttpHandler handler = new(input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
+
+        List<ChatMessage> messages =
+        [
+            new(ChatRole.User, "What's the weather?"),
+            new(ChatRole.Assistant,
+            [
+                new TextReasoningContent("The user wants the weather.")
+                {
+                    AdditionalProperties = new() { [reasoningFieldName] = "The user wants the weather." },
+                },
+                new TextContent("Let me check."),
+                new FunctionCallContent("call_1", "GetWeather", arguments: new Dictionary<string, object?> { ["location"] = "Paris" }),
+            ]),
+            new(ChatRole.Tool, [new FunctionResultContent("call_1", "72°F and sunny")]),
+        ];
+
+        // VerbatimHttpHandler asserts the request body matches `input` via JsonNode.DeepEquals,
+        // which verifies the outbound JSON uses the correct reasoning field name.
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in client.GetStreamingResponseAsync(messages))
+        {
+            updates.Add(update);
+        }
+
+        Assert.Equal("It's 72°F and sunny in Paris.", string.Concat(updates.Select(u => u.Text)));
     }
 
     [Theory]

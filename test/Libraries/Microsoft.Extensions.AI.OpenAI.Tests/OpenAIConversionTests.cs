@@ -6,6 +6,7 @@ using System.ClientModel.Primitives;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -700,6 +701,67 @@ public class OpenAIConversionTests
         AssistantChatMessage m4 = Assert.IsType<AssistantChatMessage>(convertedMessages[index + 4], exactMatch: false);
         Assert.Equal("The answer is 42.", Assert.Single(m4.Content).Text);
         Assert.Null(m4.ParticipantName);
+    }
+
+    [Theory]
+    [InlineData("reasoning_content")]
+    [InlineData("reasoning")]
+    public void AsOpenAIChatMessages_UsesOriginalReasoningFieldName(string fieldName)
+    {
+        // When TextReasoningContent carries the original field name via AdditionalProperties,
+        // the outbound conversion should use that field name in the serialized JSON.
+        // This ensures providers using "reasoning" (vLLM, Together, Groq, OpenRouter)
+        // get the correct field name round-tripped, not always "reasoning_content".
+        List<ChatMessage> messages =
+        [
+            new(ChatRole.User, "hello"),
+            new(ChatRole.Assistant,
+            [
+                new TextReasoningContent("thinking hard...")
+                {
+                    AdditionalProperties = new() { [fieldName] = "thinking hard..." },
+                },
+                new TextContent("The answer."),
+            ]),
+        ];
+
+        var convertedMessages = messages.AsOpenAIChatMessages().ToArray();
+        AssistantChatMessage assistantMsg = Assert.IsType<AssistantChatMessage>(convertedMessages[1], exactMatch: false);
+
+#pragma warning disable SCME0001 // JsonPatch is experimental
+        Assert.True(assistantMsg.Patch.TryGetValue(
+            Encoding.UTF8.GetBytes($"$.{fieldName}"), out string? reasoningValue));
+        Assert.Equal("thinking hard...", reasoningValue);
+#pragma warning restore SCME0001
+    }
+
+    [Fact]
+    public void AsOpenAIChatMessages_DefaultsToReasoningFieldWhenNoAdditionalProperties()
+    {
+        // When TextReasoningContent has no AdditionalProperties (e.g., user-created),
+        // the outbound conversion should default to "reasoning" since the ecosystem
+        // is converging on that field name (vLLM, Together, Groq, OpenRouter).
+        List<ChatMessage> messages =
+        [
+            new(ChatRole.User, "hello"),
+            new(ChatRole.Assistant,
+            [
+                new TextReasoningContent("thinking hard..."),
+                new TextContent("The answer."),
+            ]),
+        ];
+
+        var convertedMessages = messages.AsOpenAIChatMessages().ToArray();
+        AssistantChatMessage assistantMsg = Assert.IsType<AssistantChatMessage>(convertedMessages[1], exactMatch: false);
+
+#pragma warning disable SCME0001 // JsonPatch is experimental
+        Assert.True(
+            assistantMsg.Patch.TryGetValue(
+                Encoding.UTF8.GetBytes("$.reasoning"), out string? reasoningValue));
+        Assert.Equal("thinking hard...", reasoningValue);
+
+        Assert.False(assistantMsg.Patch.Contains(Encoding.UTF8.GetBytes("$.reasoning_content")));
+#pragma warning restore SCME0001
     }
 
     [Fact]

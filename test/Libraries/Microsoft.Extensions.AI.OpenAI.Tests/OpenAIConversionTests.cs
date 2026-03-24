@@ -765,6 +765,96 @@ public class OpenAIConversionTests
     }
 
     [Fact]
+    public void AsOpenAIChatMessages_ReasoningDetails_ProducesJsonArray()
+    {
+        // When TextReasoningContent items carry the "reasoning_details" key in AdditionalProperties,
+        // the outbound conversion should produce a reasoning_details JSON array in the patch.
+        List<ChatMessage> messages =
+        [
+            new(ChatRole.User, "hello"),
+            new(ChatRole.Assistant,
+            [
+                new TextReasoningContent("Summary text")
+                {
+                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.summary", "summary": "Summary text", "id": "rs-1" }""" },
+                },
+                new TextReasoningContent(string.Empty)
+                {
+                    ProtectedData = "eyJlbmM9InRydWUifQ==",
+                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.encrypted", "data": "eyJlbmM9InRydWUifQ==", "id": "rs-2" }""" },
+                },
+                new TextContent("The answer."),
+            ]),
+        ];
+
+        var convertedMessages = messages.AsOpenAIChatMessages().ToArray();
+        AssistantChatMessage assistantMsg = Assert.IsType<AssistantChatMessage>(convertedMessages[1], exactMatch: false);
+
+#pragma warning disable SCME0001 // JsonPatch is experimental
+        Assert.True(assistantMsg.Patch.TryGetJson(
+            Encoding.UTF8.GetBytes("$.reasoning_details"), out System.ReadOnlyMemory<byte> detailsJson));
+
+        using JsonDocument doc = JsonDocument.Parse(detailsJson);
+        Assert.Equal(JsonValueKind.Array, doc.RootElement.ValueKind);
+        Assert.Equal(2, doc.RootElement.GetArrayLength());
+
+        var first = doc.RootElement[0];
+        Assert.Equal("reasoning.summary", first.GetProperty("type").GetString());
+        Assert.Equal("Summary text", first.GetProperty("summary").GetString());
+
+        var second = doc.RootElement[1];
+        Assert.Equal("reasoning.encrypted", second.GetProperty("type").GetString());
+        Assert.Equal("eyJlbmM9InRydWUifQ==", second.GetProperty("data").GetString());
+
+        // Should NOT have a reasoning string field since all TRCs are reasoning_details
+        Assert.False(assistantMsg.Patch.Contains(Encoding.UTF8.GetBytes("$.reasoning")));
+        Assert.False(assistantMsg.Patch.Contains(Encoding.UTF8.GetBytes("$.reasoning_content")));
+#pragma warning restore SCME0001
+    }
+
+    [Fact]
+    public void AsOpenAIChatMessages_MixedReasoningAndReasoningDetails()
+    {
+        // When both reasoning string and reasoning_details TRCs are present,
+        // both should be emitted correctly.
+        List<ChatMessage> messages =
+        [
+            new(ChatRole.User, "hello"),
+            new(ChatRole.Assistant,
+            [
+                new TextReasoningContent("Let me think...")
+                {
+                    AdditionalProperties = new() { ["reasoning"] = "Let me think..." },
+                },
+                new TextReasoningContent("Step by step.")
+                {
+                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.text", "text": "Step by step.", "id": "rs-1" }""" },
+                },
+                new TextContent("The answer."),
+            ]),
+        ];
+
+        var convertedMessages = messages.AsOpenAIChatMessages().ToArray();
+        AssistantChatMessage assistantMsg = Assert.IsType<AssistantChatMessage>(convertedMessages[1], exactMatch: false);
+
+#pragma warning disable SCME0001 // JsonPatch is experimental
+        // Should have reasoning string
+        Assert.True(assistantMsg.Patch.TryGetValue(
+            Encoding.UTF8.GetBytes("$.reasoning"), out string? reasoningValue));
+        Assert.Equal("Let me think...", reasoningValue);
+
+        // Should also have reasoning_details array
+        Assert.True(assistantMsg.Patch.TryGetJson(
+            Encoding.UTF8.GetBytes("$.reasoning_details"), out System.ReadOnlyMemory<byte> detailsJson));
+
+        using JsonDocument doc = JsonDocument.Parse(detailsJson);
+        Assert.Equal(1, doc.RootElement.GetArrayLength());
+        Assert.Equal("reasoning.text", doc.RootElement[0].GetProperty("type").GetString());
+        Assert.Equal("Step by step.", doc.RootElement[0].GetProperty("text").GetString());
+#pragma warning restore SCME0001
+    }
+
+    [Fact]
     public void AsOpenAIResponseItems_ProducesExpectedOutput()
     {
         Assert.Throws<ArgumentNullException>("messages", () => ((IEnumerable<ChatMessage>)null!).AsOpenAIResponseItems());

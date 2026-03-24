@@ -6,6 +6,7 @@ using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
@@ -203,6 +204,7 @@ internal sealed partial class OpenAIChatClient : IChatClient
                 string? refusal = null;
                 StringBuilder? reasoningText = null;
                 string? reasoningFieldName = null;
+                List<TextReasoningContent>? reasoningDetailsTrcs = null;
                 foreach (var content in input.Contents)
                 {
                     switch (content)
@@ -215,6 +217,10 @@ internal sealed partial class OpenAIChatClient : IChatClient
                             (toolCalls ??= []).Add(
                                 ChatToolCall.CreateFunctionToolCall(fc.CallId, fc.Name, new(JsonSerializer.SerializeToUtf8Bytes(
                                     fc.Arguments, AIJsonUtilities.DefaultOptions.GetTypeInfo(typeof(IDictionary<string, object?>))))));
+                            break;
+
+                        case TextReasoningContent trc when trc.AdditionalProperties?.ContainsKey("reasoning_details") == true:
+                            (reasoningDetailsTrcs ??= []).Add(trc);
                             break;
 
                         case TextReasoningContent trc:
@@ -267,6 +273,14 @@ internal sealed partial class OpenAIChatClient : IChatClient
                 {
 #pragma warning disable SCME0001 // JsonPatch is experimental
                     PatchReasoningContent(ref message.Patch, reasoningText.ToString(), reasoningFieldName ?? "reasoning");
+#pragma warning restore SCME0001
+                }
+
+                // Inject structured reasoning_details array (OpenRouter convention) back onto the wire.
+                if (reasoningDetailsTrcs is not null)
+                {
+#pragma warning disable SCME0001 // JsonPatch is experimental
+                    PatchReasoningDetails(ref message.Patch, reasoningDetailsTrcs);
 #pragma warning restore SCME0001
                 }
 
@@ -411,6 +425,15 @@ internal sealed partial class OpenAIChatClient : IChatClient
                 });
             }
 
+            // Check for structured reasoning_details array (OpenRouter convention with summary/text/encrypted blocks).
+            if (TryGetReasoningDetailsDelta(update, out List<TextReasoningContent>? reasoningDetails))
+            {
+                foreach (TextReasoningContent detail in reasoningDetails)
+                {
+                    responseUpdate.Contents.Add(detail);
+                }
+            }
+
             if (update.OutputAudioUpdate is { } audioUpdate)
             {
                 responseUpdate.Contents.Add(new DataContent(audioUpdate.AudioBytesUpdate.ToMemory(), GetOutputAudioMimeType(options))
@@ -538,6 +561,15 @@ internal sealed partial class OpenAIChatClient : IChatClient
             {
                 AdditionalProperties = new() { [reasoningFieldName!] = reasoningText },
             });
+        }
+
+        // Check for structured reasoning_details array (OpenRouter convention with summary/text/encrypted blocks).
+        if (TryGetReasoningDetailsMessage(openAICompletion, out List<TextReasoningContent>? reasoningDetails))
+        {
+            foreach (TextReasoningContent detail in reasoningDetails)
+            {
+                returnMessage.Contents.Add(detail);
+            }
         }
 
         // Output audio is handled separately from message content parts.
@@ -929,6 +961,119 @@ internal sealed partial class OpenAIChatClient : IChatClient
     private static void PatchReasoningContent(ref JsonPatch patch, string reasoningContent, string fieldName)
     {
         patch.Set(fieldName == "reasoning" ? "$.reasoning"u8 : "$.reasoning_content"u8, reasoningContent);
+    }
+
+    /// <summary>Tries to extract structured reasoning details from a non-streaming chat completion's Patch.</summary>
+    private static bool TryGetReasoningDetailsMessage(ChatCompletion completion, [NotNullWhen(true)] out List<TextReasoningContent>? details)
+    {
+        if (completion.Patch.TryGetJson("$.choices[0].message.reasoning_details"u8, out ReadOnlyMemory<byte> detailsJson))
+        {
+            details = ParseReasoningDetails(detailsJson);
+            return details is { Count: > 0 };
+        }
+
+        details = null;
+        return false;
+    }
+
+    /// <summary>Tries to extract structured reasoning details from a streaming chat completion update's Patch.</summary>
+    private static bool TryGetReasoningDetailsDelta(StreamingChatCompletionUpdate update, [NotNullWhen(true)] out List<TextReasoningContent>? details)
+    {
+        if (update.Patch.TryGetJson("$.choices[0].delta.reasoning_details"u8, out ReadOnlyMemory<byte> detailsJson))
+        {
+            details = ParseReasoningDetails(detailsJson);
+            return details is { Count: > 0 };
+        }
+
+        details = null;
+        return false;
+    }
+
+    /// <summary>Parses a JSON array of reasoning_details elements into <see cref="TextReasoningContent"/> items.</summary>
+    private static List<TextReasoningContent>? ParseReasoningDetails(ReadOnlyMemory<byte> json)
+    {
+        JsonDocument doc;
+        try
+        {
+            doc = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        using (doc)
+        {
+            if (doc.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            List<TextReasoningContent>? results = null;
+            foreach (JsonElement element in doc.RootElement.EnumerateArray())
+            {
+                string? type = element.TryGetProperty("type", out JsonElement typeProp) ? typeProp.GetString() : null;
+                string? text = null;
+                string? protectedData = null;
+
+                switch (type)
+                {
+                    case "reasoning.text":
+                        text = element.TryGetProperty("text", out JsonElement textProp) ? textProp.GetString() : null;
+                        break;
+                    case "reasoning.summary":
+                        text = element.TryGetProperty("summary", out JsonElement summaryProp) ? summaryProp.GetString() : null;
+                        break;
+                    case "reasoning.encrypted":
+                        protectedData = element.TryGetProperty("data", out JsonElement dataProp) ? dataProp.GetString() : null;
+                        break;
+                    default:
+                        text = element.TryGetProperty("text", out JsonElement fallbackProp) ? fallbackProp.GetString() : null;
+                        break;
+                }
+
+                var trc = new TextReasoningContent(text ?? string.Empty)
+                {
+                    AdditionalProperties = new() { ["reasoning_details"] = element.GetRawText() },
+                    ProtectedData = protectedData,
+                };
+
+                (results ??= []).Add(trc);
+            }
+
+            return results;
+        }
+    }
+
+    /// <summary>Builds and sets a reasoning_details JSON array in <paramref name="patch"/> from the given <see cref="TextReasoningContent"/> items.</summary>
+    private static void PatchReasoningDetails(ref JsonPatch patch, List<TextReasoningContent> details)
+    {
+        using MemoryStream stream = new();
+        using (Utf8JsonWriter writer = new(stream))
+        {
+            writer.WriteStartArray();
+            foreach (TextReasoningContent trc in details)
+            {
+                if (trc.AdditionalProperties?["reasoning_details"] is string rawJson)
+                {
+                    // Round-trip the original JSON element faithfully.
+                    using JsonDocument elementDoc = JsonDocument.Parse(rawJson);
+                    elementDoc.RootElement.WriteTo(writer);
+                }
+                else
+                {
+                    // Reconstruct a reasoning.text element from the text content.
+                    writer.WriteStartObject();
+                    writer.WriteString("type"u8, "reasoning.text");
+                    writer.WriteString("text"u8, trc.Text);
+                    writer.WriteEndObject();
+                }
+            }
+
+            writer.WriteEndArray();
+        }
+
+        patch.Set("$.reasoning_details"u8, stream.ToArray().AsSpan());
     }
 #pragma warning restore SCME0001
 

@@ -2154,6 +2154,407 @@ public class OpenAIChatClientTests
         Assert.Equal("It's 72°F and sunny in Paris.", string.Concat(updates.Select(u => u.Text)));
     }
 
+    [Fact]
+    public async Task ReasoningDetails_NonStreaming_SurfacedAsTextReasoningContent()
+    {
+        const string Input = """
+            {
+                "messages":[{"role":"user","content":"hello"}],
+                "model":"gpt-oss-120b"
+            }
+            """;
+
+        const string Output = """
+            {
+              "id": "c48a440c7dd64389b7fbe908e006ba3d",
+              "object": "chat.completion",
+              "created": 1770959477,
+              "model": "gpt-oss-120b",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "The answer is 42.",
+                    "reasoning_details": [
+                      { "type": "reasoning.summary", "summary": "Analyzed the question", "id": "rs-1", "format": "anthropic-claude-v1", "index": 0 },
+                      { "type": "reasoning.encrypted", "data": "eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=", "id": "rs-2", "format": "anthropic-claude-v1", "index": 1 },
+                      { "type": "reasoning.text", "text": "Step by step calculation.", "signature": null, "id": "rs-3", "format": "anthropic-claude-v1", "index": 2 }
+                    ]
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": {
+                "prompt_tokens": 84,
+                "completion_tokens": 44,
+                "total_tokens": 128
+              }
+            }
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
+
+        var response = await client.GetResponseAsync("hello");
+        Assert.NotNull(response);
+
+        var message = response.Messages.Single();
+
+        // Verify regular text content
+        var text = message.Contents.OfType<TextContent>().Single();
+        Assert.Equal("The answer is 42.", text.Text);
+
+        // Verify reasoning_details produced three TextReasoningContent items
+        var details = message.Contents.OfType<TextReasoningContent>().ToList();
+        Assert.Equal(3, details.Count);
+
+        // Summary block
+        Assert.Equal("Analyzed the question", details[0].Text);
+        Assert.Null(details[0].ProtectedData);
+        Assert.True(details[0].AdditionalProperties?.ContainsKey("reasoning_details"));
+
+        // Encrypted block
+        Assert.Equal(string.Empty, details[1].Text);
+        Assert.Equal("eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=", details[1].ProtectedData);
+        Assert.True(details[1].AdditionalProperties?.ContainsKey("reasoning_details"));
+
+        // Text block
+        Assert.Equal("Step by step calculation.", details[2].Text);
+        Assert.Null(details[2].ProtectedData);
+        Assert.True(details[2].AdditionalProperties?.ContainsKey("reasoning_details"));
+    }
+
+    [Fact]
+    public async Task ReasoningDetails_NonStreaming_MixedWithReasoningString()
+    {
+        const string Input = """
+            {
+                "messages":[{"role":"user","content":"hello"}],
+                "model":"gpt-oss-120b"
+            }
+            """;
+
+        const string Output = """
+            {
+              "id": "c48a440c7dd64389b7fbe908e006ba3d",
+              "object": "chat.completion",
+              "created": 1770959477,
+              "model": "gpt-oss-120b",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": {
+                    "role": "assistant",
+                    "content": "The answer is 42.",
+                    "reasoning": "Let me think about this...",
+                    "reasoning_details": [
+                      { "type": "reasoning.text", "text": "Step by step.", "id": "rs-1", "format": "anthropic-claude-v1", "index": 0 }
+                    ]
+                  },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "prompt_tokens": 84, "completion_tokens": 44, "total_tokens": 128 }
+            }
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
+
+        var response = await client.GetResponseAsync("hello");
+        var message = response.Messages.Single();
+
+        // Should have both reasoning string TRC and reasoning_details TRCs
+        var allReasoning = message.Contents.OfType<TextReasoningContent>().ToList();
+        Assert.Equal(2, allReasoning.Count);
+
+        // First is from the reasoning string field
+        var stringReasoning = allReasoning.First(r => r.AdditionalProperties?.ContainsKey("reasoning") == true);
+        Assert.Equal("Let me think about this...", stringReasoning.Text);
+
+        // Second is from reasoning_details array
+        var detailReasoning = allReasoning.First(r => r.AdditionalProperties?.ContainsKey("reasoning_details") == true);
+        Assert.Equal("Step by step.", detailReasoning.Text);
+    }
+
+    [Fact]
+    public async Task ReasoningDetails_Streaming_SurfacedAsTextReasoningContent()
+    {
+        const string Input = """
+            {
+                "messages":[{"role":"user","content":"hello"}],
+                "model":"gpt-oss-120b",
+                "stream":true,
+                "stream_options":{"include_usage":true}
+            }
+            """;
+
+        const string Output = """
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
+
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"reasoning_details":[{"type":"reasoning.text","text":"Thinking about step 1...","id":"rs-1","format":"anthropic-claude-v1","index":0}]},"finish_reason":null}]}
+
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"reasoning_details":[{"type":"reasoning.encrypted","data":"eyJlbmM9InRydWUifQ==","id":"rs-2","format":"anthropic-claude-v1","index":1}]},"finish_reason":null}]}
+
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":"The answer."},"finish_reason":null}]}
+
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[],"usage":{"completion_tokens":46,"prompt_tokens":84,"total_tokens":130}}
+
+            data: [DONE]
+
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
+
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in client.GetStreamingResponseAsync("hello"))
+        {
+            updates.Add(update);
+        }
+
+        // Verify reasoning_details were captured
+        var reasoningDetails = updates.SelectMany(u => u.Contents).OfType<TextReasoningContent>().ToList();
+        Assert.Equal(2, reasoningDetails.Count);
+
+        // First is a text block
+        Assert.Equal("Thinking about step 1...", reasoningDetails[0].Text);
+        Assert.True(reasoningDetails[0].AdditionalProperties?.ContainsKey("reasoning_details"));
+
+        // Second is an encrypted block
+        Assert.Equal(string.Empty, reasoningDetails[1].Text);
+        Assert.Equal("eyJlbmM9InRydWUifQ==", reasoningDetails[1].ProtectedData);
+
+        // Verify regular content was also captured
+        Assert.Equal("The answer.", string.Concat(updates.Select(u => u.Text)));
+    }
+
+    [Fact]
+    public async Task ReasoningDetails_Streaming_CoalescedCorrectly()
+    {
+        const string Input = """
+            {
+                "messages":[{"role":"user","content":"hello"}],
+                "model":"gpt-oss-120b",
+                "stream":true,
+                "stream_options":{"include_usage":true}
+            }
+            """;
+
+        const string Output = """
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
+
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"reasoning_details":[{"type":"reasoning.summary","summary":"Analyzing the problem","id":"rs-1","format":"anthropic-claude-v1","index":0}]},"finish_reason":null}]}
+
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"reasoning_details":[{"type":"reasoning.encrypted","data":"eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=","id":"rs-2","format":"anthropic-claude-v1","index":1}]},"finish_reason":null}]}
+
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"reasoning_details":[{"type":"reasoning.text","text":"Step by step.","id":"rs-3","format":"anthropic-claude-v1","index":2}]},"finish_reason":null}]}
+
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{"content":"42"},"finish_reason":null}]}
+
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+            data: {"id":"381fb75e8a1f451f8a579c9da104b739","object":"chat.completion.chunk","created":1770959485,"model":"gpt-oss-120b","choices":[],"usage":{"completion_tokens":46,"prompt_tokens":84,"total_tokens":130}}
+
+            data: [DONE]
+
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
+
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in client.GetStreamingResponseAsync("hello"))
+        {
+            updates.Add(update);
+        }
+
+        // Raw updates should have 3 reasoning detail items
+        var rawDetails = updates.SelectMany(u => u.Contents).OfType<TextReasoningContent>().ToList();
+        Assert.Equal(3, rawDetails.Count);
+
+        // Coalesce into a ChatResponse
+        var coalesced = updates.ToChatResponse();
+        var coalescedDetails = coalesced.Messages.SelectMany(m => m.Contents).OfType<TextReasoningContent>().ToList();
+
+        // The coalescing rule for TextReasoningContent: merge if first item's ProtectedData is null/empty.
+        // So summary (ProtectedData=null) merges with encrypted (ProtectedData="eyJ...") → one item.
+        // Then encrypted-merged (ProtectedData="eyJ...") does NOT merge with text (canMerge returns false).
+        Assert.Equal(2, coalescedDetails.Count);
+
+        // First coalesced item: summary merged into encrypted block.
+        // Text is concatenation: "Analyzing the problem" + "" = "Analyzing the problem".
+        // ProtectedData comes from the last item in the merged range (encrypted block).
+        // AdditionalProperties cloned from the first item (summary).
+        Assert.Equal("Analyzing the problem", coalescedDetails[0].Text);
+        Assert.Equal("eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=", coalescedDetails[0].ProtectedData);
+        Assert.True(coalescedDetails[0].AdditionalProperties?.ContainsKey("reasoning_details"));
+
+        // Second item: text block stayed separate because the merged item has ProtectedData set.
+        Assert.Equal("Step by step.", coalescedDetails[1].Text);
+        Assert.Null(coalescedDetails[1].ProtectedData);
+        Assert.True(coalescedDetails[1].AdditionalProperties?.ContainsKey("reasoning_details"));
+
+        // Regular content also coalesced
+        Assert.Equal("42", coalesced.Text);
+    }
+
+    [Fact]
+    public async Task ReasoningDetails_OutboundPayload_RoundTripsArray()
+    {
+        string input = """
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "hello"
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "",
+                        "reasoning_details": [
+                            { "type": "reasoning.summary", "summary": "Analyzed the question", "id": "rs-1", "format": "anthropic-claude-v1", "index": 0 },
+                            { "type": "reasoning.encrypted", "data": "eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=", "id": "rs-2", "format": "anthropic-claude-v1", "index": 1 },
+                            { "type": "reasoning.text", "text": "Step by step.", "signature": null, "id": "rs-3", "format": "anthropic-claude-v1", "index": 2 }
+                        ]
+                    },
+                    {
+                        "role": "user",
+                        "content": "thanks"
+                    }
+                ],
+                "model": "gpt-oss-120b"
+            }
+            """;
+
+        const string Output = """
+            {
+              "id": "resp2",
+              "object": "chat.completion",
+              "created": 1770959477,
+              "model": "gpt-oss-120b",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "You're welcome!" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70 }
+            }
+            """;
+
+        using VerbatimHttpHandler handler = new(input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
+
+        // Build conversation with reasoning_details TRCs (as would be produced by inbound extraction)
+        List<ChatMessage> messages =
+        [
+            new(ChatRole.User, "hello"),
+            new(ChatRole.Assistant,
+            [
+                new TextReasoningContent("Analyzed the question")
+                {
+                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.summary", "summary": "Analyzed the question", "id": "rs-1", "format": "anthropic-claude-v1", "index": 0 }""" },
+                },
+                new TextReasoningContent(string.Empty)
+                {
+                    ProtectedData = "eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=",
+                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.encrypted", "data": "eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=", "id": "rs-2", "format": "anthropic-claude-v1", "index": 1 }""" },
+                },
+                new TextReasoningContent("Step by step.")
+                {
+                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.text", "text": "Step by step.", "signature": null, "id": "rs-3", "format": "anthropic-claude-v1", "index": 2 }""" },
+                },
+            ]),
+            new(ChatRole.User, "thanks"),
+        ];
+
+        // VerbatimHttpHandler asserts request body matches `input` via JsonNode.DeepEquals
+        var response = await client.GetResponseAsync(messages);
+        Assert.NotNull(response);
+        Assert.Equal("You're welcome!", response.Text);
+    }
+
+    [Fact]
+    public async Task ReasoningDetails_OutboundPayload_MixedWithReasoningString()
+    {
+        string input = """
+            {
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": "hello"
+                    },
+                    {
+                        "role": "assistant",
+                        "content": "",
+                        "reasoning": "Let me think...",
+                        "reasoning_details": [
+                            { "type": "reasoning.text", "text": "Step by step.", "id": "rs-1", "format": "anthropic-claude-v1", "index": 0 }
+                        ]
+                    },
+                    {
+                        "role": "user",
+                        "content": "thanks"
+                    }
+                ],
+                "model": "gpt-oss-120b"
+            }
+            """;
+
+        const string Output = """
+            {
+              "id": "resp2",
+              "object": "chat.completion",
+              "created": 1770959477,
+              "model": "gpt-oss-120b",
+              "choices": [
+                {
+                  "index": 0,
+                  "message": { "role": "assistant", "content": "You're welcome!" },
+                  "finish_reason": "stop"
+                }
+              ],
+              "usage": { "prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70 }
+            }
+            """;
+
+        using VerbatimHttpHandler handler = new(input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
+
+        // Build conversation with both reasoning string and reasoning_details
+        List<ChatMessage> messages =
+        [
+            new(ChatRole.User, "hello"),
+            new(ChatRole.Assistant,
+            [
+                new TextReasoningContent("Let me think...")
+                {
+                    AdditionalProperties = new() { ["reasoning"] = "Let me think..." },
+                },
+                new TextReasoningContent("Step by step.")
+                {
+                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.text", "text": "Step by step.", "id": "rs-1", "format": "anthropic-claude-v1", "index": 0 }""" },
+                },
+            ]),
+            new(ChatRole.User, "thanks"),
+        ];
+
+        var response = await client.GetResponseAsync(messages);
+        Assert.NotNull(response);
+        Assert.Equal("You're welcome!", response.Text);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

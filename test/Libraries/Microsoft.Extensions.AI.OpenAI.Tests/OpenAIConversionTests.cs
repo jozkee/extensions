@@ -708,7 +708,7 @@ public class OpenAIConversionTests
     [InlineData("reasoning")]
     public void AsOpenAIChatMessages_UsesOriginalReasoningFieldName(string fieldName)
     {
-        // When TextReasoningContent carries the original field name via AdditionalProperties,
+        // When the message carries the original field name via AdditionalProperties,
         // the outbound conversion should use that field name in the serialized JSON.
         // This ensures providers using "reasoning" (vLLM, Together, Groq, OpenRouter)
         // get the correct field name round-tripped, not always "reasoning_content".
@@ -717,12 +717,12 @@ public class OpenAIConversionTests
             new(ChatRole.User, "hello"),
             new(ChatRole.Assistant,
             [
-                new TextReasoningContent("thinking hard...")
-                {
-                    AdditionalProperties = new() { [fieldName] = "thinking hard..." },
-                },
+                new TextReasoningContent("thinking hard..."),
                 new TextContent("The answer."),
-            ]),
+            ])
+            {
+                AdditionalProperties = new() { [fieldName] = "thinking hard..." },
+            },
         ];
 
         var convertedMessages = messages.AsOpenAIChatMessages().ToArray();
@@ -767,24 +767,27 @@ public class OpenAIConversionTests
     [Fact]
     public void AsOpenAIChatMessages_ReasoningDetails_ProducesJsonArray()
     {
-        // When TextReasoningContent items carry the "reasoning_details" key in AdditionalProperties,
+        // When the message carries a "reasoning_details" raw element list in AdditionalProperties,
         // the outbound conversion should produce a reasoning_details JSON array in the patch.
         List<ChatMessage> messages =
         [
             new(ChatRole.User, "hello"),
             new(ChatRole.Assistant,
             [
-                new TextReasoningContent("Summary text")
-                {
-                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.summary", "summary": "Summary text", "id": "rs-1" }""" },
-                },
-                new TextReasoningContent(string.Empty)
-                {
-                    ProtectedData = "eyJlbmM9InRydWUifQ==",
-                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.encrypted", "data": "eyJlbmM9InRydWUifQ==", "id": "rs-2" }""" },
-                },
+                new TextReasoningContent("Summary text"),
+                new TextReasoningContent(string.Empty) { ProtectedData = "eyJlbmM9InRydWUifQ==" },
                 new TextContent("The answer."),
-            ]),
+            ])
+            {
+                AdditionalProperties = new()
+                {
+                    ["reasoning_details"] = new List<string>
+                    {
+                        """{ "type": "reasoning.summary", "summary": "Summary text", "id": "rs-1" }""",
+                        """{ "type": "reasoning.encrypted", "data": "eyJlbmM9InRydWUifQ==", "id": "rs-2" }""",
+                    },
+                },
+            },
         ];
 
         var convertedMessages = messages.AsOpenAIChatMessages().ToArray();
@@ -806,7 +809,7 @@ public class OpenAIConversionTests
         Assert.Equal("reasoning.encrypted", second.GetProperty("type").GetString());
         Assert.Equal("eyJlbmM9InRydWUifQ==", second.GetProperty("data").GetString());
 
-        // Should NOT have a reasoning string field since all TRCs are reasoning_details
+        // Should NOT have a reasoning string field
         Assert.False(assistantMsg.Patch.Contains(Encoding.UTF8.GetBytes("$.reasoning")));
         Assert.False(assistantMsg.Patch.Contains(Encoding.UTF8.GetBytes("$.reasoning_content")));
 #pragma warning restore SCME0001
@@ -815,23 +818,27 @@ public class OpenAIConversionTests
     [Fact]
     public void AsOpenAIChatMessages_MixedReasoningAndReasoningDetails()
     {
-        // When both reasoning string and reasoning_details TRCs are present,
+        // When both reasoning string and reasoning_details are on the message AP,
         // both should be emitted correctly.
         List<ChatMessage> messages =
         [
             new(ChatRole.User, "hello"),
             new(ChatRole.Assistant,
             [
-                new TextReasoningContent("Let me think...")
-                {
-                    AdditionalProperties = new() { ["reasoning"] = "Let me think..." },
-                },
-                new TextReasoningContent("Step by step.")
-                {
-                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.text", "text": "Step by step.", "id": "rs-1" }""" },
-                },
+                new TextReasoningContent("Let me think..."),
+                new TextReasoningContent("Step by step."),
                 new TextContent("The answer."),
-            ]),
+            ])
+            {
+                AdditionalProperties = new()
+                {
+                    ["reasoning"] = "Let me think...",
+                    ["reasoning_details"] = new List<string>
+                    {
+                        """{ "type": "reasoning.text", "text": "Step by step.", "id": "rs-1" }""",
+                    },
+                },
+            },
         ];
 
         var convertedMessages = messages.AsOpenAIChatMessages().ToArray();

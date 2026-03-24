@@ -202,9 +202,35 @@ internal sealed partial class OpenAIChatClient : IChatClient
                 List<ChatMessageContentPart>? contentParts = null;
                 List<ChatToolCall>? toolCalls = null;
                 string? refusal = null;
+
+                // Check message-level AdditionalProperties for raw reasoning data first.
+                // This is the authoritative source for round-tripping because it survives
+                // streaming coalescing (unlike per-TRC AdditionalProperties which may be lost).
+                string? messageReasoningString = null;
+                string? messageReasoningFieldName = null;
+                List<string>? messageReasoningDetails = null;
+                if (input.AdditionalProperties is { } messageProps)
+                {
+                    if (messageProps.TryGetValue("reasoning", out object? rVal) && rVal is string rStr)
+                    {
+                        messageReasoningString = rStr;
+                        messageReasoningFieldName = "reasoning";
+                    }
+                    else if (messageProps.TryGetValue("reasoning_content", out object? rcVal) && rcVal is string rcStr)
+                    {
+                        messageReasoningString = rcStr;
+                        messageReasoningFieldName = "reasoning_content";
+                    }
+
+                    if (messageProps.TryGetValue("reasoning_details", out object? rdVal) && rdVal is List<string> rdList)
+                    {
+                        messageReasoningDetails = rdList;
+                    }
+                }
+
+                // Fall back to TRC-based reasoning only if message AP doesn't have it.
                 StringBuilder? reasoningText = null;
                 string? reasoningFieldName = null;
-                List<TextReasoningContent>? reasoningDetailsTrcs = null;
                 foreach (var content in input.Contents)
                 {
                     switch (content)
@@ -219,18 +245,18 @@ internal sealed partial class OpenAIChatClient : IChatClient
                                     fc.Arguments, AIJsonUtilities.DefaultOptions.GetTypeInfo(typeof(IDictionary<string, object?>))))));
                             break;
 
-                        case TextReasoningContent trc when trc.AdditionalProperties?.ContainsKey("reasoning_details") == true:
-                            (reasoningDetailsTrcs ??= []).Add(trc);
-                            break;
-
                         case TextReasoningContent trc:
-                            _ = (reasoningText ??= new()).Append(trc.Text);
-                            if (reasoningFieldName is null && trc.AdditionalProperties is { } props)
+                            // Only accumulate from TRCs if message AP doesn't already carry the raw data.
+                            if (messageReasoningString is null && messageReasoningDetails is null)
                             {
-                                reasoningFieldName =
-                                    props.ContainsKey("reasoning") ? "reasoning" :
-                                    props.ContainsKey("reasoning_content") ? "reasoning_content" :
-                                    null;
+                                _ = (reasoningText ??= new()).Append(trc.Text);
+                                if (reasoningFieldName is null && trc.AdditionalProperties is { } props)
+                                {
+                                    reasoningFieldName =
+                                        props.ContainsKey("reasoning") ? "reasoning" :
+                                        props.ContainsKey("reasoning_content") ? "reasoning_content" :
+                                        null;
+                                }
                             }
 
                             break;
@@ -267,22 +293,24 @@ internal sealed partial class OpenAIChatClient : IChatClient
                 message.ParticipantName = SanitizeAuthorName(input.AuthorName);
                 message.Refusal = refusal;
 
-                // Inject reasoning content from OpenAI-compatible endpoints (e.g. DeepSeek, vLLM, OpenRouter)
-                // back onto the wire using the original field name so it round-trips correctly.
-                if (reasoningText is not null)
-                {
 #pragma warning disable SCME0001 // JsonPatch is experimental
+                // Inject reasoning content back onto the wire. Prefer message-level AP (faithful raw data)
+                // over TRC-based reconstruction (lossy fallback for user-created content).
+                if (messageReasoningString is not null)
+                {
+                    PatchReasoningContent(ref message.Patch, messageReasoningString, messageReasoningFieldName!);
+                }
+                else if (reasoningText is not null)
+                {
                     PatchReasoningContent(ref message.Patch, reasoningText.ToString(), reasoningFieldName ?? "reasoning");
-#pragma warning restore SCME0001
                 }
 
-                // Inject structured reasoning_details array (OpenRouter convention) back onto the wire.
-                if (reasoningDetailsTrcs is not null)
+                // Inject structured reasoning_details array back onto the wire.
+                if (messageReasoningDetails is not null)
                 {
-#pragma warning disable SCME0001 // JsonPatch is experimental
-                    PatchReasoningDetails(ref message.Patch, reasoningDetailsTrcs);
-#pragma warning restore SCME0001
+                    PatchReasoningDetailsRaw(ref message.Patch, messageReasoningDetails);
                 }
+#pragma warning restore SCME0001
 
                 yield return message;
             }
@@ -387,6 +415,14 @@ internal sealed partial class OpenAIChatClient : IChatClient
         DateTimeOffset? createdAt = null;
         string? modelId = null;
 
+        // Accumulators for reasoning fields so we can store the fully accumulated
+        // raw data on each update's AdditionalProperties. ToChatResponse copies
+        // update AP to message AP (via SetAll), so the final accumulated value
+        // survives coalescing and enables faithful outbound round-tripping.
+        StringBuilder? accumulatedReasoning = null;
+        string? accumulatedReasoningFieldName = null;
+        List<string>? accumulatedReasoningDetailElements = null;
+
         // Process each update as it arrives
         await foreach (StreamingChatCompletionUpdate update in updates.WithCancellation(cancellationToken).ConfigureAwait(false))
         {
@@ -419,10 +455,12 @@ internal sealed partial class OpenAIChatClient : IChatClient
             // that surface it via non-standard fields in the response JSON.
             if (TryGetReasoningDelta(update, out string? reasoningText, out string? reasoningFieldName))
             {
-                responseUpdate.Contents.Add(new TextReasoningContent(reasoningText)
-                {
-                    AdditionalProperties = new() { [reasoningFieldName!] = reasoningText },
-                });
+                responseUpdate.Contents.Add(new TextReasoningContent(reasoningText));
+
+                // Accumulate the raw reasoning string so the last update carries the complete value.
+                _ = (accumulatedReasoning ??= new()).Append(reasoningText);
+                accumulatedReasoningFieldName ??= reasoningFieldName;
+                (responseUpdate.AdditionalProperties ??= [])[accumulatedReasoningFieldName!] = accumulatedReasoning.ToString();
             }
 
             // Check for structured reasoning_details array (OpenRouter convention with summary/text/encrypted blocks).
@@ -431,7 +469,15 @@ internal sealed partial class OpenAIChatClient : IChatClient
                 foreach (TextReasoningContent detail in reasoningDetails)
                 {
                     responseUpdate.Contents.Add(detail);
+
+                    // Accumulate raw JSON elements for each reasoning_details item.
+                    if (detail.AdditionalProperties?["reasoning_details"] is string rawElement)
+                    {
+                        (accumulatedReasoningDetailElements ??= []).Add(rawElement);
+                    }
                 }
+
+                (responseUpdate.AdditionalProperties ??= [])["reasoning_details"] = accumulatedReasoningDetailElements!;
             }
 
             if (update.OutputAudioUpdate is { } audioUpdate)
@@ -557,19 +603,27 @@ internal sealed partial class OpenAIChatClient : IChatClient
         // that surface it via non-standard fields in the response JSON.
         if (TryGetReasoningMessage(openAICompletion, out string? reasoningText, out string? reasoningFieldName))
         {
-            returnMessage.Contents.Add(new TextReasoningContent(reasoningText)
-            {
-                AdditionalProperties = new() { [reasoningFieldName!] = reasoningText },
-            });
+            returnMessage.Contents.Add(new TextReasoningContent(reasoningText));
+
+            // Store the raw reasoning string on the message for faithful outbound round-tripping.
+            (returnMessage.AdditionalProperties ??= [])[reasoningFieldName!] = reasoningText;
         }
 
         // Check for structured reasoning_details array (OpenRouter convention with summary/text/encrypted blocks).
         if (TryGetReasoningDetailsMessage(openAICompletion, out List<TextReasoningContent>? reasoningDetails))
         {
+            List<string> rawElements = new(reasoningDetails.Count);
             foreach (TextReasoningContent detail in reasoningDetails)
             {
                 returnMessage.Contents.Add(detail);
+                if (detail.AdditionalProperties?["reasoning_details"] is string rawElement)
+                {
+                    rawElements.Add(rawElement);
+                }
             }
+
+            // Store the raw element list on the message for faithful outbound round-tripping.
+            (returnMessage.AdditionalProperties ??= [])["reasoning_details"] = rawElements;
         }
 
         // Output audio is handled separately from message content parts.
@@ -1045,29 +1099,17 @@ internal sealed partial class OpenAIChatClient : IChatClient
         }
     }
 
-    /// <summary>Builds and sets a reasoning_details JSON array in <paramref name="patch"/> from the given <see cref="TextReasoningContent"/> items.</summary>
-    private static void PatchReasoningDetails(ref JsonPatch patch, List<TextReasoningContent> details)
+    /// <summary>Builds and sets a reasoning_details JSON array in <paramref name="patch"/> from the given raw JSON element strings.</summary>
+    private static void PatchReasoningDetailsRaw(ref JsonPatch patch, List<string> rawElements)
     {
         using MemoryStream stream = new();
         using (Utf8JsonWriter writer = new(stream))
         {
             writer.WriteStartArray();
-            foreach (TextReasoningContent trc in details)
+            foreach (string rawJson in rawElements)
             {
-                if (trc.AdditionalProperties?["reasoning_details"] is string rawJson)
-                {
-                    // Round-trip the original JSON element faithfully.
-                    using JsonDocument elementDoc = JsonDocument.Parse(rawJson);
-                    elementDoc.RootElement.WriteTo(writer);
-                }
-                else
-                {
-                    // Reconstruct a reasoning.text element from the text content.
-                    writer.WriteStartObject();
-                    writer.WriteString("type"u8, "reasoning.text");
-                    writer.WriteString("text"u8, trc.Text);
-                    writer.WriteEndObject();
-                }
+                using JsonDocument elementDoc = JsonDocument.Parse(rawJson);
+                elementDoc.RootElement.WriteTo(writer);
             }
 
             writer.WriteEndArray();

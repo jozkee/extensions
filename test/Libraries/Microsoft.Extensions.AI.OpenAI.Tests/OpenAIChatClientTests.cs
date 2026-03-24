@@ -1916,9 +1916,9 @@ public class OpenAIChatClientTests
         var reasoning = message.Contents.OfType<TextReasoningContent>().Single();
         Assert.Equal("We just compare decimals: 9.11 vs 9.8. 9.8 > 9.11. Answer briefly.", reasoning.Text);
 
-        // Verify the original field name is preserved as a key for outbound roundtrip
-        Assert.True(reasoning.AdditionalProperties?.ContainsKey(reasoningFieldName));
-        Assert.Equal(reasoning.Text, reasoning.AdditionalProperties?[reasoningFieldName]);
+        // Verify the raw reasoning string is stored on the message for outbound roundtrip
+        Assert.True(message.AdditionalProperties?.ContainsKey(reasoningFieldName));
+        Assert.Equal(reasoning.Text, message.AdditionalProperties?[reasoningFieldName]);
 
         var text = message.Contents.OfType<TextContent>().Single();
         Assert.Equal("9.8 is larger.", text.Text);
@@ -1973,18 +1973,13 @@ public class OpenAIChatClientTests
         string reasoningText = string.Concat(updates.SelectMany(u => u.Contents).OfType<TextReasoningContent>().Select(r => r.Text));
         Assert.Equal("User asks: which is larger.", reasoningText);
 
-        // Verify the field name is stored as the key on the first reasoning chunk
-        var firstReasoning = updates.SelectMany(u => u.Contents).OfType<TextReasoningContent>().First();
-        Assert.True(firstReasoning.AdditionalProperties?.ContainsKey(reasoningFieldName));
-
-        // Verify the field name key survives coalescing into a ChatResponse
+        // Verify the accumulated reasoning string survives coalescing via message-level AP.
         var coalesced = updates.ToChatResponse();
-        var coalescedReasoning = coalesced.Messages.SelectMany(m => m.Contents).OfType<TextReasoningContent>().First();
-        Assert.True(coalescedReasoning.AdditionalProperties?.ContainsKey(reasoningFieldName));
+        var coalescedMessage = coalesced.Messages.Single();
+        Assert.True(coalescedMessage.AdditionalProperties?.ContainsKey(reasoningFieldName));
 
-        // Coalescing clones AdditionalProperties from the first chunk only,
-        // so the value is the first chunk's text, not the full concatenation.
-        Assert.Equal("User asks", (string?)coalescedReasoning.AdditionalProperties?[reasoningFieldName]);
+        // The message AP carries the fully accumulated reasoning string.
+        Assert.Equal("User asks: which is larger.", (string?)coalescedMessage.AdditionalProperties?[reasoningFieldName]);
 
         // Verify regular content was also captured from the content deltas
         Assert.Equal("9.8 is larger.", string.Concat(updates.Select(u => u.Text)));
@@ -2049,19 +2044,20 @@ public class OpenAIChatClientTests
         using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
 
         // Build a multi-turn conversation where the assistant message has reasoning content
-        // with the field name stored in AdditionalProperties (as produced by inbound extraction).
+        // with the raw reasoning string stored on the message's AdditionalProperties
+        // (as produced by inbound extraction).
         List<ChatMessage> messages =
         [
             new(ChatRole.User, "What's the weather?"),
             new(ChatRole.Assistant,
             [
-                new TextReasoningContent("The user wants the weather.")
-                {
-                    AdditionalProperties = new() { [reasoningFieldName] = "The user wants the weather." },
-                },
+                new TextReasoningContent("The user wants the weather."),
                 new TextContent("Let me check."),
                 new FunctionCallContent("call_1", "GetWeather", arguments: new Dictionary<string, object?> { ["location"] = "Paris" }),
-            ]),
+            ])
+            {
+                AdditionalProperties = new() { [reasoningFieldName] = "The user wants the weather." },
+            },
             new(ChatRole.Tool, [new FunctionResultContent("call_1", "72°F and sunny")]),
         ];
 
@@ -2133,13 +2129,13 @@ public class OpenAIChatClientTests
             new(ChatRole.User, "What's the weather?"),
             new(ChatRole.Assistant,
             [
-                new TextReasoningContent("The user wants the weather.")
-                {
-                    AdditionalProperties = new() { [reasoningFieldName] = "The user wants the weather." },
-                },
+                new TextReasoningContent("The user wants the weather."),
                 new TextContent("Let me check."),
                 new FunctionCallContent("call_1", "GetWeather", arguments: new Dictionary<string, object?> { ["location"] = "Paris" }),
-            ]),
+            ])
+            {
+                AdditionalProperties = new() { [reasoningFieldName] = "The user wants the weather." },
+            },
             new(ChatRole.Tool, [new FunctionResultContent("call_1", "72°F and sunny")]),
         ];
 
@@ -2213,17 +2209,19 @@ public class OpenAIChatClientTests
         // Summary block
         Assert.Equal("Analyzed the question", details[0].Text);
         Assert.Null(details[0].ProtectedData);
-        Assert.True(details[0].AdditionalProperties?.ContainsKey("reasoning_details"));
 
         // Encrypted block
         Assert.Equal(string.Empty, details[1].Text);
         Assert.Equal("eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=", details[1].ProtectedData);
-        Assert.True(details[1].AdditionalProperties?.ContainsKey("reasoning_details"));
 
         // Text block
         Assert.Equal("Step by step calculation.", details[2].Text);
         Assert.Null(details[2].ProtectedData);
-        Assert.True(details[2].AdditionalProperties?.ContainsKey("reasoning_details"));
+
+        // Verify the raw element list is stored on the message for faithful round-tripping
+        Assert.True(message.AdditionalProperties?.ContainsKey("reasoning_details"));
+        var rawElements = Assert.IsType<List<string>>(message.AdditionalProperties!["reasoning_details"]);
+        Assert.Equal(3, rawElements.Count);
     }
 
     [Fact]
@@ -2271,13 +2269,16 @@ public class OpenAIChatClientTests
         var allReasoning = message.Contents.OfType<TextReasoningContent>().ToList();
         Assert.Equal(2, allReasoning.Count);
 
-        // First is from the reasoning string field
-        var stringReasoning = allReasoning.First(r => r.AdditionalProperties?.ContainsKey("reasoning") == true);
-        Assert.Equal("Let me think about this...", stringReasoning.Text);
+        // First TRC text is from the reasoning string field
+        Assert.Equal("Let me think about this...", allReasoning[0].Text);
 
-        // Second is from reasoning_details array
-        var detailReasoning = allReasoning.First(r => r.AdditionalProperties?.ContainsKey("reasoning_details") == true);
-        Assert.Equal("Step by step.", detailReasoning.Text);
+        // Second TRC text is from reasoning_details array
+        Assert.Equal("Step by step.", allReasoning[1].Text);
+
+        // Both raw values stored on the message AP
+        Assert.Equal("Let me think about this...", message.AdditionalProperties?["reasoning"]);
+        var rawElements = Assert.IsType<List<string>>(message.AdditionalProperties!["reasoning_details"]);
+        Assert.Single(rawElements);
     }
 
     [Fact]
@@ -2325,7 +2326,6 @@ public class OpenAIChatClientTests
 
         // First is a text block
         Assert.Equal("Thinking about step 1...", reasoningDetails[0].Text);
-        Assert.True(reasoningDetails[0].AdditionalProperties?.ContainsKey("reasoning_details"));
 
         // Second is an encrypted block
         Assert.Equal(string.Empty, reasoningDetails[1].Text);
@@ -2382,7 +2382,8 @@ public class OpenAIChatClientTests
 
         // Coalesce into a ChatResponse
         var coalesced = updates.ToChatResponse();
-        var coalescedDetails = coalesced.Messages.SelectMany(m => m.Contents).OfType<TextReasoningContent>().ToList();
+        var coalescedMessage = coalesced.Messages.Single();
+        var coalescedDetails = coalescedMessage.Contents.OfType<TextReasoningContent>().ToList();
 
         // The coalescing rule for TextReasoningContent: merge if first item's ProtectedData is null/empty.
         // So summary (ProtectedData=null) merges with encrypted (ProtectedData="eyJ...") → one item.
@@ -2390,17 +2391,18 @@ public class OpenAIChatClientTests
         Assert.Equal(2, coalescedDetails.Count);
 
         // First coalesced item: summary merged into encrypted block.
-        // Text is concatenation: "Analyzing the problem" + "" = "Analyzing the problem".
-        // ProtectedData comes from the last item in the merged range (encrypted block).
-        // AdditionalProperties cloned from the first item (summary).
         Assert.Equal("Analyzing the problem", coalescedDetails[0].Text);
         Assert.Equal("eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=", coalescedDetails[0].ProtectedData);
-        Assert.True(coalescedDetails[0].AdditionalProperties?.ContainsKey("reasoning_details"));
 
-        // Second item: text block stayed separate because the merged item has ProtectedData set.
+        // Second item: text block stayed separate.
         Assert.Equal("Step by step.", coalescedDetails[1].Text);
         Assert.Null(coalescedDetails[1].ProtectedData);
-        Assert.True(coalescedDetails[1].AdditionalProperties?.ContainsKey("reasoning_details"));
+
+        // Despite coalescing merging TRCs, the message-level AP carries the full
+        // raw reasoning_details element list, enabling faithful outbound round-tripping.
+        Assert.True(coalescedMessage.AdditionalProperties?.ContainsKey("reasoning_details"));
+        var rawElements = Assert.IsType<List<string>>(coalescedMessage.AdditionalProperties!["reasoning_details"]);
+        Assert.Equal(3, rawElements.Count);
 
         // Regular content also coalesced
         Assert.Equal("42", coalesced.Text);
@@ -2455,26 +2457,28 @@ public class OpenAIChatClientTests
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
 
-        // Build conversation with reasoning_details TRCs (as would be produced by inbound extraction)
+        // Build conversation with reasoning_details raw element list on message AP
+        // (as would be produced by inbound extraction).
         List<ChatMessage> messages =
         [
             new(ChatRole.User, "hello"),
             new(ChatRole.Assistant,
             [
-                new TextReasoningContent("Analyzed the question")
+                new TextReasoningContent("Analyzed the question"),
+                new TextReasoningContent(string.Empty) { ProtectedData = "eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=" },
+                new TextReasoningContent("Step by step."),
+            ])
+            {
+                AdditionalProperties = new()
                 {
-                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.summary", "summary": "Analyzed the question", "id": "rs-1", "format": "anthropic-claude-v1", "index": 0 }""" },
+                    ["reasoning_details"] = new List<string>
+                    {
+                        """{ "type": "reasoning.summary", "summary": "Analyzed the question", "id": "rs-1", "format": "anthropic-claude-v1", "index": 0 }""",
+                        """{ "type": "reasoning.encrypted", "data": "eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=", "id": "rs-2", "format": "anthropic-claude-v1", "index": 1 }""",
+                        """{ "type": "reasoning.text", "text": "Step by step.", "signature": null, "id": "rs-3", "format": "anthropic-claude-v1", "index": 2 }""",
+                    },
                 },
-                new TextReasoningContent(string.Empty)
-                {
-                    ProtectedData = "eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=",
-                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.encrypted", "data": "eyJlbmNyeXB0ZWQiOiJ0cnVlIn0=", "id": "rs-2", "format": "anthropic-claude-v1", "index": 1 }""" },
-                },
-                new TextReasoningContent("Step by step.")
-                {
-                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.text", "text": "Step by step.", "signature": null, "id": "rs-3", "format": "anthropic-claude-v1", "index": 2 }""" },
-                },
-            ]),
+            },
             new(ChatRole.User, "thanks"),
         ];
 
@@ -2532,21 +2536,25 @@ public class OpenAIChatClientTests
         using HttpClient httpClient = new(handler);
         using IChatClient client = CreateChatClient(httpClient, "gpt-oss-120b");
 
-        // Build conversation with both reasoning string and reasoning_details
+        // Build conversation with both reasoning string and reasoning_details on message AP
         List<ChatMessage> messages =
         [
             new(ChatRole.User, "hello"),
             new(ChatRole.Assistant,
             [
-                new TextReasoningContent("Let me think...")
+                new TextReasoningContent("Let me think..."),
+                new TextReasoningContent("Step by step."),
+            ])
+            {
+                AdditionalProperties = new()
                 {
-                    AdditionalProperties = new() { ["reasoning"] = "Let me think..." },
+                    ["reasoning"] = "Let me think...",
+                    ["reasoning_details"] = new List<string>
+                    {
+                        """{ "type": "reasoning.text", "text": "Step by step.", "id": "rs-1", "format": "anthropic-claude-v1", "index": 0 }""",
+                    },
                 },
-                new TextReasoningContent("Step by step.")
-                {
-                    AdditionalProperties = new() { ["reasoning_details"] = """{ "type": "reasoning.text", "text": "Step by step.", "id": "rs-1", "format": "anthropic-claude-v1", "index": 0 }""" },
-                },
-            ]),
+            },
             new(ChatRole.User, "thanks"),
         ];
 

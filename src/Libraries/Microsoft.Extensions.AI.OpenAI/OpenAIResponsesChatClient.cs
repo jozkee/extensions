@@ -272,16 +272,20 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
 
                     message.Contents.Add(new WebSearchToolResultContent(wscri.Id)
                     {
-                        Results = GetWebSearchSources(wscri),
+                        Outputs = GetWebSearchSources(wscri),
                         RawRepresentation = wscri,
                     });
                     break;
 
                 // These tool types don't have dedicated AIContent-derived types. We use the base ToolCallContent/ToolResultContent
                 // to represent them, with the original ResponseItem accessible via RawRepresentation for type-specific data.
-                case FileSearchCallResponseItem:
+                case FileSearchCallResponseItem fileSearch:
                     message.Contents.Add(new ToolCallContent(outputItem.Id));
-                    message.Contents.Add(new ToolResultContent(outputItem.Id) { RawRepresentation = outputItem });
+                    message.Contents.Add(new ToolResultContent(outputItem.Id)
+                    {
+                        RawRepresentation = outputItem,
+                        Outputs = GetFileSearchOutputs(fileSearch),
+                    });
                     break;
 
                 case ComputerCallResponseItem:
@@ -558,7 +562,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                             // Also yield the WebSearchToolResultContent.
                             yield return CreateUpdate(new WebSearchToolResultContent(wscri.Id)
                             {
-                                Results = GetWebSearchSources(wscri),
+                                Outputs = GetWebSearchSources(wscri),
                                 RawRepresentation = wscri,
                             });
                             break;
@@ -594,9 +598,13 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
 
                         // FileSearch items contain both the call and results inline, so we emit a call+result pair.
                         // ComputerCall results arrive as a separate ComputerCallOutputResponseItem.
-                        case FileSearchCallResponseItem:
+                        case FileSearchCallResponseItem fileSearch:
                             var toolCallUpdate = CreateUpdate(new ToolCallContent(outputItemDoneUpdate.Item.Id));
-                            toolCallUpdate.Contents.Add(new ToolResultContent(outputItemDoneUpdate.Item.Id) { RawRepresentation = outputItemDoneUpdate.Item });
+                            toolCallUpdate.Contents.Add(new ToolResultContent(outputItemDoneUpdate.Item.Id)
+                            {
+                                RawRepresentation = outputItemDoneUpdate.Item,
+                                Outputs = GetFileSearchOutputs(fileSearch),
+                            });
                             yield return toolCallUpdate;
                             break;
 
@@ -1586,6 +1594,45 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
         }
 
         return results;
+    }
+
+    /// <summary>Extracts file search results as <see cref="TextContent"/> items from a <see cref="FileSearchCallResponseItem"/>.</summary>
+    private static List<AIContent>? GetFileSearchOutputs(FileSearchCallResponseItem fileSearch)
+    {
+        if (fileSearch.Results is not { Count: > 0 } results)
+        {
+            return null;
+        }
+
+        List<AIContent> outputs = [];
+        foreach (var result in results)
+        {
+            if (result.Text is not null)
+            {
+                var textContent = new TextContent(result.Text) { RawRepresentation = result };
+                AdditionalPropertiesDictionary? props = null;
+
+                if (result.Filename is not null)
+                {
+                    (props ??= [])[nameof(result.Filename)] = result.Filename;
+                }
+
+                if (result.FileId is not null)
+                {
+                    (props ??= [])[nameof(result.FileId)] = result.FileId;
+                }
+
+                if (result.Score is not null)
+                {
+                    (props ??= [])[nameof(result.Score)] = result.Score;
+                }
+
+                textContent.AdditionalProperties = props;
+                outputs.Add(textContent);
+            }
+        }
+
+        return outputs.Count > 0 ? outputs : null;
     }
 
     /// <summary>Adds new <see cref="AIContent"/> for the specified <paramref name="mtci"/> into <paramref name="contents"/>.</summary>

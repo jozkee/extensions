@@ -28,7 +28,11 @@ public sealed class McpServerToolResultContent : ToolResultContent
     }
 
     /// <summary>
-    /// Gets or sets the output contents of the tool call.
+    /// Gets or sets the output contents of the MCP server tool call.
     /// </summary>
-    public IList<AIContent>? Outputs { get; set; }
+    public new IList<AIContent>? Outputs
+    {
+        get => base.Outputs;
+        set => base.Outputs = value;
+    }
 }

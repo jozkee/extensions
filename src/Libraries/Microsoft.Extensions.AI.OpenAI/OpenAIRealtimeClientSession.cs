@@ -1169,7 +1169,7 @@ public sealed class OpenAIRealtimeClientSession : IRealtimeClientSession
 
     private static RealtimeConversationItem MapMcpToolCallItem(Sdk.RealtimeMcpToolCallItem mcpItem)
     {
-        string callId = mcpItem.Id ?? string.Empty;
+        string callId = Guid.NewGuid().ToString("N");
 
         IDictionary<string, object?>? arguments = null;
         if (mcpItem.ToolArguments is not null)
@@ -1208,7 +1208,7 @@ public sealed class OpenAIRealtimeClientSession : IRealtimeClientSession
 
     private static RealtimeConversationItem MapMcpApprovalRequestItem(Sdk.RealtimeMcpToolCallApprovalRequestItem approvalItem)
     {
-        string approvalId = approvalItem.Id ?? string.Empty;
+        string syntheticCallId = Guid.NewGuid().ToString("N");
 
         IDictionary<string, object?>? arguments = null;
         if (approvalItem.ToolArguments is not null)
@@ -1220,14 +1220,14 @@ public sealed class OpenAIRealtimeClientSession : IRealtimeClientSession
             }
         }
 
-        var toolCall = new McpServerToolCallContent(approvalId, approvalItem.ToolName ?? string.Empty, approvalItem.ServerLabel)
+        var toolCall = new McpServerToolCallContent(syntheticCallId, approvalItem.ToolName ?? string.Empty, approvalItem.ServerLabel)
         {
             Arguments = arguments,
             RawRepresentation = approvalItem,
         };
 
         return new RealtimeConversationItem(
-            [new ToolApprovalRequestContent(approvalId, toolCall) { RawRepresentation = approvalItem }],
+            [new ToolApprovalRequestContent(approvalItem.Id ?? string.Empty, toolCall) { RawRepresentation = approvalItem }],
             approvalItem.Id);
     }
 
@@ -1238,7 +1238,7 @@ public sealed class OpenAIRealtimeClientSession : IRealtimeClientSession
         {
             if (toolDef.Name is not null)
             {
-                contents.Add(new McpServerToolCallContent(toolDef.Name, toolDef.Name, toolListItem.ServerLabel)
+                contents.Add(new McpServerToolCallContent(Guid.NewGuid().ToString("N"), toolDef.Name, toolListItem.ServerLabel)
                 {
                     RawRepresentation = toolDef,
                 });

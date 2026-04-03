@@ -936,14 +936,14 @@ public class OpenAIConversionTests
         // Second update should be McpServerToolCallContent + McpServerToolResultContent
         McpServerToolCallContent? mcpToolCallContent = updates[1].Contents.OfType<McpServerToolCallContent>().FirstOrDefault();
         Assert.NotNull(mcpToolCallContent);
-        Assert.Equal("mcp_call_123", mcpToolCallContent.CallId);
+        Assert.False(string.IsNullOrEmpty(mcpToolCallContent.CallId));
         Assert.Equal("ask_question", mcpToolCallContent.Name);
         Assert.Equal("deepwiki", mcpToolCallContent.ServerName);
         Assert.Null(mcpToolCallContent.RawRepresentation); // Intentionally null to avoid duplication during roundtrip
 
         McpServerToolResultContent? mcpToolResultContent = updates[1].Contents.OfType<McpServerToolResultContent>().FirstOrDefault();
         Assert.NotNull(mcpToolResultContent);
-        Assert.Equal("mcp_call_123", mcpToolResultContent.CallId);
+        Assert.Equal(mcpToolCallContent.CallId, mcpToolResultContent.CallId);
         Assert.NotNull(mcpToolResultContent.RawRepresentation);
         Assert.Same(mcpToolCall, mcpToolResultContent.RawRepresentation);
 
@@ -968,7 +968,7 @@ public class OpenAIConversionTests
 
         // The correlated FunctionCall should be McpServerToolCallContent with tool details from the request
         McpServerToolCallContent correlatedMcpCall = Assert.IsType<McpServerToolCallContent>(approvalResponse.ToolCall);
-        Assert.Equal("mcpr_123", correlatedMcpCall.CallId);
+        Assert.False(string.IsNullOrEmpty(correlatedMcpCall.CallId));
         Assert.Equal("ask_question", correlatedMcpCall.Name);
         Assert.Equal("deepwiki", correlatedMcpCall.ServerName);
         Assert.NotNull(correlatedMcpCall.Arguments);
@@ -977,24 +977,24 @@ public class OpenAIConversionTests
         // Fifth update: WebSearchCallResponseItem -> WebSearchToolCallContent
         WebSearchToolCallContent? wsToolCall = updates[4].Contents.OfType<WebSearchToolCallContent>().FirstOrDefault();
         Assert.NotNull(wsToolCall);
-        Assert.Equal("ws_123", wsToolCall.CallId);
+        Assert.False(string.IsNullOrEmpty(wsToolCall.CallId));
         Assert.Null(wsToolCall.RawRepresentation);
 
         // Sixth update: WebSearchCallResponseItem -> WebSearchToolResultContent
         WebSearchToolResultContent? wsToolResult = updates[5].Contents.OfType<WebSearchToolResultContent>().FirstOrDefault();
         Assert.NotNull(wsToolResult);
-        Assert.Equal("ws_123", wsToolResult.CallId);
+        Assert.Equal(wsToolCall.CallId, wsToolResult.CallId);
         Assert.Same(webSearchItem, wsToolResult.RawRepresentation);
 
         // Seventh update: FileSearchCallResponseItem -> ToolCallContent + ToolResultContent
         ToolCallContent? fsToolCall = updates[6].Contents.OfType<ToolCallContent>().FirstOrDefault();
         Assert.NotNull(fsToolCall);
-        Assert.Equal("fs_123", fsToolCall.CallId);
+        Assert.False(string.IsNullOrEmpty(fsToolCall.CallId));
         Assert.Null(fsToolCall.RawRepresentation);
 
         ToolResultContent? fsToolResult = updates[6].Contents.OfType<ToolResultContent>().FirstOrDefault();
         Assert.NotNull(fsToolResult);
-        Assert.Equal("fs_123", fsToolResult.CallId);
+        Assert.Equal(fsToolCall.CallId, fsToolResult.CallId);
         Assert.Same(fileSearchItem, fsToolResult.RawRepresentation);
 
         // Eighth update: ComputerCallResponseItem -> ToolCallContent
@@ -1226,16 +1226,16 @@ public class OpenAIConversionTests
 
         // 5. McpToolCallItem -> McpServerToolCallContent + McpServerToolResultContent
         // Note: AddMcpToolCallContent creates both contents; RawRepresentation is only on the result, not the call
-        McpServerToolCallContent? mcpToolCall = message.Contents.OfType<McpServerToolCallContent>().FirstOrDefault(c => c.CallId == "mcp_call_123");
+        McpServerToolCallContent? mcpToolCall = message.Contents.OfType<McpServerToolCallContent>().FirstOrDefault();
         Assert.NotNull(mcpToolCall);
-        Assert.Equal("mcp_call_123", mcpToolCall.CallId);
+        Assert.False(string.IsNullOrEmpty(mcpToolCall.CallId));
         Assert.Equal("ask_question", mcpToolCall.Name);
         Assert.Equal("deepwiki", mcpToolCall.ServerName);
         Assert.Null(mcpToolCall.RawRepresentation); // Intentionally null to avoid duplication during roundtrip
 
-        McpServerToolResultContent? mcpToolResult = message.Contents.OfType<McpServerToolResultContent>().FirstOrDefault(c => c.CallId == "mcp_call_123");
+        McpServerToolResultContent? mcpToolResult = message.Contents.OfType<McpServerToolResultContent>().FirstOrDefault();
         Assert.NotNull(mcpToolResult);
-        Assert.Equal("mcp_call_123", mcpToolResult.CallId);
+        Assert.Equal(mcpToolCall.CallId, mcpToolResult.CallId);
         Assert.NotNull(mcpToolResult.RawRepresentation);
         Assert.Same(mcpToolCallItem, mcpToolResult.RawRepresentation);
 
@@ -1263,29 +1263,31 @@ public class OpenAIConversionTests
 
         // The correlated FunctionCall should be McpServerToolCallContent with tool details from the request
         McpServerToolCallContent correlatedMcpCall = Assert.IsType<McpServerToolCallContent>(approvalResponseContent.ToolCall);
-        Assert.Equal("mcpr_123", correlatedMcpCall.CallId);
+        Assert.False(string.IsNullOrEmpty(correlatedMcpCall.CallId));
         Assert.Equal("ask_question", correlatedMcpCall.Name);
         Assert.Equal("deepwiki", correlatedMcpCall.ServerName);
         Assert.NotNull(correlatedMcpCall.Arguments);
         Assert.Equal("dotnet/extensions", correlatedMcpCall.Arguments["repoName"]?.ToString());
 
         // 8. WebSearchCallResponseItem -> WebSearchToolCallContent + WebSearchToolResultContent
-        WebSearchToolCallContent? webSearchToolCall = message.Contents.OfType<WebSearchToolCallContent>().FirstOrDefault(c => c.CallId == "ws_123");
+        WebSearchToolCallContent? webSearchToolCall = message.Contents.OfType<WebSearchToolCallContent>().FirstOrDefault();
         Assert.NotNull(webSearchToolCall);
         Assert.Null(webSearchToolCall.RawRepresentation); // Intentionally null to avoid duplication during roundtrip
 
-        WebSearchToolResultContent? webSearchToolResult = message.Contents.OfType<WebSearchToolResultContent>().FirstOrDefault(c => c.CallId == "ws_123");
+        WebSearchToolResultContent? webSearchToolResult = message.Contents.OfType<WebSearchToolResultContent>().FirstOrDefault();
         Assert.NotNull(webSearchToolResult);
         Assert.Same(webSearchItem, webSearchToolResult.RawRepresentation);
+        Assert.Equal(webSearchToolCall.CallId, webSearchToolResult.CallId);
 
         // 9. FileSearchCallResponseItem -> ToolCallContent + ToolResultContent
-        ToolCallContent? fileSearchToolCall = message.Contents.OfType<ToolCallContent>().FirstOrDefault(c => c.CallId == "fs_123");
+        ToolCallContent? fileSearchToolCall = message.Contents.OfType<ToolCallContent>().FirstOrDefault(c => c.GetType() == typeof(ToolCallContent));
         Assert.NotNull(fileSearchToolCall);
         Assert.Null(fileSearchToolCall.RawRepresentation);
 
-        ToolResultContent? fileSearchToolResult = message.Contents.OfType<ToolResultContent>().FirstOrDefault(c => c.CallId == "fs_123");
+        ToolResultContent? fileSearchToolResult = message.Contents.OfType<ToolResultContent>().FirstOrDefault(c => c.GetType() == typeof(ToolResultContent));
         Assert.NotNull(fileSearchToolResult);
         Assert.Same(fileSearchItem, fileSearchToolResult.RawRepresentation);
+        Assert.Equal(fileSearchToolCall.CallId, fileSearchToolResult.CallId);
 
         // 10. ComputerCallResponseItem -> ToolCallContent (result comes separately)
         ToolCallContent? computerToolCall = message.Contents.OfType<ToolCallContent>().FirstOrDefault(c => c.CallId == "call_456");
@@ -2129,7 +2131,7 @@ public class OpenAIConversionTests
         Assert.Single(messages);
 
         WebSearchToolCallContent wsCall = Assert.Single(messages[0].Contents.OfType<WebSearchToolCallContent>());
-        Assert.Equal("ws_1", wsCall.CallId);
+        Assert.False(string.IsNullOrEmpty(wsCall.CallId));
         Assert.NotNull(wsCall.Queries);
         Assert.Equal(new[] { ".NET 10 release", "dotnet latest" }, wsCall.Queries);
     }
@@ -2145,7 +2147,7 @@ public class OpenAIConversionTests
         Assert.Single(messages);
 
         WebSearchToolCallContent wsCall = Assert.Single(messages[0].Contents.OfType<WebSearchToolCallContent>());
-        Assert.Equal("ws_2", wsCall.CallId);
+        Assert.False(string.IsNullOrEmpty(wsCall.CallId));
         Assert.NotNull(wsCall.Queries);
         Assert.Equal(new[] { "what is .NET" }, wsCall.Queries);
     }
@@ -2161,7 +2163,7 @@ public class OpenAIConversionTests
         Assert.Single(messages);
 
         WebSearchToolCallContent wsCall = Assert.Single(messages[0].Contents.OfType<WebSearchToolCallContent>());
-        Assert.Equal("ws_3", wsCall.CallId);
+        Assert.False(string.IsNullOrEmpty(wsCall.CallId));
         Assert.Null(wsCall.Queries);
     }
 

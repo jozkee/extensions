@@ -1542,7 +1542,7 @@ public class OpenAIResponseClientTests
             Assert.Equal(3, message.Contents.Count);
 
             var call = Assert.IsType<McpServerToolCallContent>(message.Contents[0]);
-            Assert.Equal("mcp_06ee3b1962eeb8470068e6b21cbaa081a3b5aa2a6c989f4c6f", call.CallId);
+            Assert.False(string.IsNullOrEmpty(call.CallId));
             Assert.Equal("deepwiki", call.ServerName);
             Assert.Equal("ask_question", call.Name);
             Assert.NotNull(call.Arguments);
@@ -1551,7 +1551,7 @@ public class OpenAIResponseClientTests
             Assert.Equal("What is the path to the README.md file for Microsoft.Extensions.AI.Abstractions?", ((JsonElement)call.Arguments["question"]!).GetString());
 
             var result = Assert.IsType<McpServerToolResultContent>(message.Contents[1]);
-            Assert.Equal("mcp_06ee3b1962eeb8470068e6b21cbaa081a3b5aa2a6c989f4c6f", result.CallId);
+            Assert.Equal(call.CallId, result.CallId);
             Assert.StartsWith("The `README.md` file for `Microsoft.Extensions.AI.Abstractions` is located at", Assert.IsType<TextContent>(Assert.Single(result.Outputs!)).Text);
 
             Assert.NotNull(response.Usage);
@@ -1919,7 +1919,7 @@ public class OpenAIResponseClientTests
         Assert.Equal(6, message.Contents.Count);
 
         var firstCall = Assert.IsType<McpServerToolCallContent>(message.Contents[1]);
-        Assert.Equal("mcp_68be4166acfc8191bc5e0a751eed358b0384f747588fc3f5", firstCall.CallId);
+        Assert.False(string.IsNullOrEmpty(firstCall.CallId));
         Assert.Equal("deepwiki", firstCall.ServerName);
         Assert.Equal("read_wiki_structure", firstCall.Name);
         Assert.NotNull(firstCall.Arguments);
@@ -1927,11 +1927,11 @@ public class OpenAIResponseClientTests
         Assert.Equal("dotnet/extensions", ((JsonElement)firstCall.Arguments["repoName"]!).GetString());
 
         var firstResult = Assert.IsType<McpServerToolResultContent>(message.Contents[2]);
-        Assert.Equal("mcp_68be4166acfc8191bc5e0a751eed358b0384f747588fc3f5", firstResult.CallId);
+        Assert.Equal(firstCall.CallId, firstResult.CallId);
         Assert.StartsWith("Available pages for dotnet/extensions", Assert.IsType<TextContent>(Assert.Single(firstResult.Outputs!)).Text);
 
         var secondCall = Assert.IsType<McpServerToolCallContent>(message.Contents[3]);
-        Assert.Equal("mcp_68be416900f88191837ae0718339a4ce0384f747588fc3f5", secondCall.CallId);
+        Assert.False(string.IsNullOrEmpty(secondCall.CallId));
         Assert.Equal("deepwiki", secondCall.ServerName);
         Assert.Equal("ask_question", secondCall.Name);
         Assert.NotNull(secondCall.Arguments);
@@ -1939,7 +1939,7 @@ public class OpenAIResponseClientTests
         Assert.Equal("What is the path to the README.md file for Microsoft.Extensions.AI.Abstractions?", ((JsonElement)secondCall.Arguments["question"]!).GetString());
 
         var secondResult = Assert.IsType<McpServerToolResultContent>(message.Contents[4]);
-        Assert.Equal("mcp_68be416900f88191837ae0718339a4ce0384f747588fc3f5", secondResult.CallId);
+        Assert.Equal(secondCall.CallId, secondResult.CallId);
         Assert.StartsWith("The `README.md` file for `Microsoft.Extensions.AI.Abstractions` is located at", Assert.IsType<TextContent>(Assert.Single(secondResult.Outputs!)).Text);
 
         Assert.NotNull(response.Usage);
@@ -2330,7 +2330,7 @@ public class OpenAIResponseClientTests
         Assert.Equal(6, message.Contents.Count);
 
         var firstCall = Assert.IsType<McpServerToolCallContent>(message.Contents[1]);
-        Assert.Equal("mcp_68be4503d45c819e89cb574361c8eba003a2537be0e84a54", firstCall.CallId);
+        Assert.False(string.IsNullOrEmpty(firstCall.CallId));
         Assert.Equal("deepwiki", firstCall.ServerName);
         Assert.Equal("read_wiki_structure", firstCall.Name);
         Assert.NotNull(firstCall.Arguments);
@@ -2338,11 +2338,11 @@ public class OpenAIResponseClientTests
         Assert.Equal("dotnet/extensions", ((JsonElement)firstCall.Arguments["repoName"]!).GetString());
 
         var firstResult = Assert.IsType<McpServerToolResultContent>(message.Contents[2]);
-        Assert.Equal("mcp_68be4503d45c819e89cb574361c8eba003a2537be0e84a54", firstResult.CallId);
+        Assert.Equal(firstCall.CallId, firstResult.CallId);
         Assert.StartsWith("Available pages for dotnet/extensions", Assert.IsType<TextContent>(Assert.Single(firstResult.Outputs!)).Text);
 
         var secondCall = Assert.IsType<McpServerToolCallContent>(message.Contents[3]);
-        Assert.Equal("mcp_68be4505f134819e806c002f27cce0c303a2537be0e84a54", secondCall.CallId);
+        Assert.False(string.IsNullOrEmpty(secondCall.CallId));
         Assert.Equal("deepwiki", secondCall.ServerName);
         Assert.Equal("ask_question", secondCall.Name);
         Assert.NotNull(secondCall.Arguments);
@@ -2350,7 +2350,7 @@ public class OpenAIResponseClientTests
         Assert.Equal("What is the path to the README.md file for Microsoft.Extensions.AI.Abstractions?", ((JsonElement)secondCall.Arguments["question"]!).GetString());
 
         var secondResult = Assert.IsType<McpServerToolResultContent>(message.Contents[4]);
-        Assert.Equal("mcp_68be4505f134819e806c002f27cce0c303a2537be0e84a54", secondResult.CallId);
+        Assert.Equal(secondCall.CallId, secondResult.CallId);
         Assert.StartsWith("The path to the `README.md` file", Assert.IsType<TextContent>(Assert.Single(secondResult.Outputs!)).Text);
 
         Assert.NotNull(response.Usage);
@@ -2539,14 +2539,14 @@ public class OpenAIResponseClientTests
         Assert.Equal(4, message.Contents.Count);
 
         var toolCall = Assert.IsType<McpServerToolCallContent>(message.Contents[1]);
-        Assert.Equal("mcp_689023b0fa88819f99f48aff343d5ad50475557f6fefb5f0", toolCall.CallId);
+        Assert.False(string.IsNullOrEmpty(toolCall.CallId));
         Assert.Equal("mymcp", toolCall.ServerName);
         Assert.Equal("test_error", toolCall.Name);
         Assert.NotNull(toolCall.Arguments);
         Assert.Empty(toolCall.Arguments);
 
         var toolResult = Assert.IsType<McpServerToolResultContent>(message.Contents[2]);
-        Assert.Equal("mcp_689023b0fa88819f99f48aff343d5ad50475557f6fefb5f0", toolResult.CallId);
+        Assert.Equal(toolCall.CallId, toolResult.CallId);
         var errorContent = Assert.IsType<ErrorContent>(Assert.Single(toolResult.Outputs!));
         Assert.Contains("An error occurred invoking 'test_error'.", errorContent.Message);
 
@@ -3620,7 +3620,7 @@ public class OpenAIResponseClientTests
         foreach (var update in codeInterpreterCallUpdates)
         {
             var content = update.Contents.OfType<CodeInterpreterToolCallContent>().First();
-            Assert.Equal("ci_05d8f42f04f94cb80068fc3b80fba8819ea3bfbdd36e94bcf3", content.CallId);
+            Assert.False(string.IsNullOrEmpty(content.CallId));
 
             // Concatenate the delta code
             if (content.Inputs is { Count: > 0 })
@@ -3650,7 +3650,7 @@ public class OpenAIResponseClientTests
 
         // First content should be the coalesced CodeInterpreterToolCallContent
         var codeCall = Assert.IsType<CodeInterpreterToolCallContent>(message.Contents[0]);
-        Assert.Equal("ci_05d8f42f04f94cb80068fc3b80fba8819ea3bfbdd36e94bcf3", codeCall.CallId);
+        Assert.False(string.IsNullOrEmpty(codeCall.CallId));
         Assert.NotNull(codeCall.Inputs);
         var codeInput = Assert.IsType<DataContent>(Assert.Single(codeCall.Inputs));
         Assert.Equal("text/x-python", codeInput.MediaType);
@@ -3658,7 +3658,7 @@ public class OpenAIResponseClientTests
 
         // Second content should be the CodeInterpreterToolResultContent
         var codeResult = Assert.IsType<CodeInterpreterToolResultContent>(message.Contents[1]);
-        Assert.Equal("ci_05d8f42f04f94cb80068fc3b80fba8819ea3bfbdd36e94bcf3", codeResult.CallId);
+        Assert.Equal(codeCall.CallId, codeResult.CallId);
     }
 
     [Fact]
@@ -6291,12 +6291,12 @@ public class OpenAIResponseClientTests
         // First content should be the tool call
         var toolCall = contents[0] as ImageGenerationToolCallContent;
         Assert.NotNull(toolCall);
-        Assert.Equal("img_call_abc123", toolCall.CallId);
+        Assert.False(string.IsNullOrEmpty(toolCall.CallId));
 
         // Second content should be the result with image data
         var toolResult = contents[1] as ImageGenerationToolResultContent;
         Assert.NotNull(toolResult);
-        Assert.Equal("img_call_abc123", toolResult.CallId);
+        Assert.Equal(toolCall.CallId, toolResult.CallId);
         Assert.Single(toolResult.Outputs!);
 
         var imageData = toolResult.Outputs![0] as DataContent;
@@ -6397,7 +6397,7 @@ public class OpenAIResponseClientTests
             u.Contents != null && u.Contents.Any(c => c is ImageGenerationToolCallContent));
         Assert.NotNull(toolCallUpdate);
         var toolCall = toolCallUpdate.Contents.OfType<ImageGenerationToolCallContent>().First();
-        Assert.Equal("img_call_def456", toolCall.CallId);
+        Assert.False(string.IsNullOrEmpty(toolCall.CallId));
 
         // Should have partial image content
         var partialImageUpdate = updates.FirstOrDefault(u =>
@@ -6556,7 +6556,7 @@ public class OpenAIResponseClientTests
             u.Contents != null && u.Contents.Any(c => c is ImageGenerationToolCallContent));
         Assert.NotNull(toolCallUpdate);
         var toolCall = toolCallUpdate.Contents.OfType<ImageGenerationToolCallContent>().First();
-        Assert.Equal("img_call_ghi789", toolCall.CallId);
+        Assert.False(string.IsNullOrEmpty(toolCall.CallId));
     }
 
     [Theory]
@@ -6946,11 +6946,11 @@ public class OpenAIResponseClientTests
         Assert.Equal(3, message.Contents.Count);
 
         var wsCall = Assert.IsType<WebSearchToolCallContent>(message.Contents[0]);
-        Assert.Equal("ws_0ed9cd9f8606486b0069888072b3d08190818b61da9cf032a7", wsCall.CallId);
+        Assert.False(string.IsNullOrEmpty(wsCall.CallId));
         Assert.Equal([".NET latest news 2023"], wsCall.Queries);
 
         var wsResult = Assert.IsType<WebSearchToolResultContent>(message.Contents[1]);
-        Assert.Equal("ws_0ed9cd9f8606486b0069888072b3d08190818b61da9cf032a7", wsResult.CallId);
+        Assert.Equal(wsCall.CallId, wsResult.CallId);
         Assert.NotNull(wsResult.RawRepresentation);
         Assert.NotNull(wsResult.Results);
         Assert.Equal(2, wsResult.Results.Count);
@@ -7063,12 +7063,12 @@ public class OpenAIResponseClientTests
         Assert.Equal(2, wsCallUpdates.Count);
 
         var wsCallInProgress = wsCallUpdates[0].Contents.OfType<WebSearchToolCallContent>().Single();
-        Assert.Equal("ws_02441a08b3f3bf4b00698880914730819eb48b3ae0c359bff3", wsCallInProgress.CallId);
+        Assert.False(string.IsNullOrEmpty(wsCallInProgress.CallId));
         Assert.NotNull(wsCallInProgress.RawRepresentation);
         Assert.Null(wsCallInProgress.Queries);
 
         var wsCallDone = wsCallUpdates[1].Contents.OfType<WebSearchToolCallContent>().Single();
-        Assert.Equal("ws_02441a08b3f3bf4b00698880914730819eb48b3ae0c359bff3", wsCallDone.CallId);
+        Assert.Equal(wsCallInProgress.CallId, wsCallDone.CallId);
         Assert.Null(wsCallDone.RawRepresentation);
         Assert.Equal([".NET latest news October 2023"], wsCallDone.Queries);
 
@@ -7076,7 +7076,7 @@ public class OpenAIResponseClientTests
         var wsResultUpdate = updates.FirstOrDefault(u => u.Contents.OfType<WebSearchToolResultContent>().Any());
         Assert.NotNull(wsResultUpdate);
         var wsResult = wsResultUpdate.Contents.OfType<WebSearchToolResultContent>().First();
-        Assert.Equal("ws_02441a08b3f3bf4b00698880914730819eb48b3ae0c359bff3", wsResult.CallId);
+        Assert.Equal(wsCallInProgress.CallId, wsResult.CallId);
         Assert.NotNull(wsResult.RawRepresentation);
         Assert.NotNull(wsResult.Results);
         Assert.Single(wsResult.Results);
@@ -7095,7 +7095,7 @@ public class OpenAIResponseClientTests
         var message = Assert.Single(response.Messages);
 
         var coalescedWsCall = message.Contents.OfType<WebSearchToolCallContent>().Single();
-        Assert.Equal("ws_02441a08b3f3bf4b00698880914730819eb48b3ae0c359bff3", coalescedWsCall.CallId);
+        Assert.Equal(wsCallInProgress.CallId, coalescedWsCall.CallId);
         Assert.Equal([".NET latest news October 2023"], coalescedWsCall.Queries);
 
         var coalescedWsResult = message.Contents.OfType<WebSearchToolResultContent>().Single();

@@ -213,8 +213,8 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                     break;
 
                 case McpToolCallApprovalRequestItem mtcari:
-                    // We are reusing the mtcari.Id as the McpServerToolCallContent.CallId since we don't have one yet.
-                    var approvalRequest = new ToolApprovalRequestContent(mtcari.Id, new McpServerToolCallContent(mtcari.Id, mtcari.ToolName, mtcari.ServerLabel)
+                    var mcpApprovalCallId = Guid.NewGuid().ToString("N");
+                    var approvalRequest = new ToolApprovalRequestContent(mtcari.Id, new McpServerToolCallContent(mcpApprovalCallId, mtcari.ToolName, mtcari.ServerLabel)
                     {
                         Arguments = JsonSerializer.Deserialize(mtcari.ToolArguments, OpenAIJsonContext.Default.IDictionaryStringObject),
                         RawRepresentation = mtcari,
@@ -244,7 +244,8 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                     break;
 
                 case CodeInterpreterCallResponseItem cicri:
-                    message.Contents.Add(new CodeInterpreterToolCallContent(cicri.Id)
+                    var codeInterpreterCallId = Guid.NewGuid().ToString("N");
+                    message.Contents.Add(new CodeInterpreterToolCallContent(codeInterpreterCallId)
                     {
                         Inputs = !string.IsNullOrWhiteSpace(cicri.Code) ? [new DataContent(Encoding.UTF8.GetBytes(cicri.Code), OpenAIClientExtensions.PythonMediaType)] : null,
 
@@ -253,15 +254,16 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                         // CodeInterpreterCallResponseItem sent back for the pair.
                     });
 
-                    message.Contents.Add(CreateCodeInterpreterResultContent(cicri));
+                    message.Contents.Add(CreateCodeInterpreterResultContent(cicri, codeInterpreterCallId));
                     break;
 
                 case ImageGenerationCallResponseItem imageGenItem:
-                    AddImageGenerationContents(imageGenItem, options, message.Contents);
+                    AddImageGenerationContents(imageGenItem, options, message.Contents, Guid.NewGuid().ToString("N"));
                     break;
 
                 case WebSearchCallResponseItem wscri:
-                    message.Contents.Add(new WebSearchToolCallContent(wscri.Id)
+                    var webSearchCallId = Guid.NewGuid().ToString("N");
+                    message.Contents.Add(new WebSearchToolCallContent(webSearchCallId)
                     {
                         Queries = GetWebSearchQueries(wscri),
 
@@ -270,7 +272,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                         // WebSearchCallResponseItem sent back for the pair.
                     });
 
-                    message.Contents.Add(new WebSearchToolResultContent(wscri.Id)
+                    message.Contents.Add(new WebSearchToolResultContent(webSearchCallId)
                     {
                         Results = GetWebSearchSources(wscri),
                         RawRepresentation = wscri,
@@ -280,8 +282,9 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                 // These tool types don't have dedicated AIContent-derived types. We use the base ToolCallContent/ToolResultContent
                 // to represent them, with the original ResponseItem accessible via RawRepresentation for type-specific data.
                 case FileSearchCallResponseItem:
-                    message.Contents.Add(new ToolCallContent(outputItem.Id));
-                    message.Contents.Add(new ToolResultContent(outputItem.Id) { RawRepresentation = outputItem });
+                    var fileSearchCallId = Guid.NewGuid().ToString("N");
+                    message.Contents.Add(new ToolCallContent(fileSearchCallId));
+                    message.Contents.Add(new ToolResultContent(fileSearchCallId) { RawRepresentation = outputItem });
                     break;
 
                 case ComputerCallResponseItem computerCall:
@@ -357,6 +360,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
         bool storedOutputDisabled = false;
         ResponseStatus? latestResponseStatus = null;
         Dictionary<string, ToolApprovalRequestContent>? mcpApprovalRequests = null;
+        Dictionary<string, string>? syntheticCallIds = null;
 
         UpdateConversationId(resumeResponseId);
 
@@ -466,18 +470,18 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                     break;
 
                 case StreamingResponseImageGenerationCallInProgressUpdate imageGenInProgress:
-                    yield return CreateUpdate(new ImageGenerationToolCallContent(imageGenInProgress.ItemId)
+                    yield return CreateUpdate(new ImageGenerationToolCallContent(GetOrCreateSyntheticCallId(ref syntheticCallIds, imageGenInProgress.ItemId))
                     {
                         RawRepresentation = imageGenInProgress,
                     });
                     break;
 
                 case StreamingResponseImageGenerationCallPartialImageUpdate streamingImageGenUpdate:
-                    yield return CreateUpdate(GetImageGenerationResult(streamingImageGenUpdate, options));
+                    yield return CreateUpdate(GetImageGenerationResult(streamingImageGenUpdate, options, GetOrCreateSyntheticCallId(ref syntheticCallIds, streamingImageGenUpdate.ItemId)));
                     break;
 
                 case StreamingResponseCodeInterpreterCallCodeDeltaUpdate codeInterpreterDeltaUpdate:
-                    yield return CreateUpdate(new CodeInterpreterToolCallContent(codeInterpreterDeltaUpdate.ItemId)
+                    yield return CreateUpdate(new CodeInterpreterToolCallContent(GetOrCreateSyntheticCallId(ref syntheticCallIds, codeInterpreterDeltaUpdate.ItemId))
                     {
                         Inputs = [new DataContent(Encoding.UTF8.GetBytes(codeInterpreterDeltaUpdate.Delta), OpenAIClientExtensions.PythonMediaType)],
                         RawRepresentation = codeInterpreterDeltaUpdate,
@@ -485,7 +489,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                     break;
 
                 case StreamingResponseWebSearchCallInProgressUpdate webSearchInProgressUpdate:
-                    yield return CreateUpdate(new WebSearchToolCallContent(webSearchInProgressUpdate.ItemId)
+                    yield return CreateUpdate(new WebSearchToolCallContent(GetOrCreateSyntheticCallId(ref syntheticCallIds, webSearchInProgressUpdate.ItemId))
                     {
                         RawRepresentation = webSearchInProgressUpdate,
                     });
@@ -506,8 +510,8 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                             break;
 
                         case McpToolCallApprovalRequestItem mtcari:
-                            // We are reusing the mtcari.Id as the McpServerToolCallContent.CallId since we don't have one yet.
-                            var streamApprovalRequest = new ToolApprovalRequestContent(mtcari.Id, new McpServerToolCallContent(mtcari.Id, mtcari.ToolName, mtcari.ServerLabel)
+                            var streamMcpApprovalCallId = Guid.NewGuid().ToString("N");
+                            var streamApprovalRequest = new ToolApprovalRequestContent(mtcari.Id, new McpServerToolCallContent(streamMcpApprovalCallId, mtcari.ToolName, mtcari.ServerLabel)
                             {
                                 Arguments = JsonSerializer.Deserialize(mtcari.ToolArguments, OpenAIJsonContext.Default.IDictionaryStringObject),
                                 RawRepresentation = mtcari,
@@ -544,19 +548,20 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                         case CodeInterpreterCallResponseItem cicri:
                             // The CodeInterpreterToolCallContent has already been yielded as part of delta updates.
                             // Only yield the CodeInterpreterToolResultContent here for the outputs.
-                            yield return CreateUpdate(CreateCodeInterpreterResultContent(cicri));
+                            yield return CreateUpdate(CreateCodeInterpreterResultContent(cicri, GetOrCreateSyntheticCallId(ref syntheticCallIds, cicri.Id)));
                             break;
 
                         case WebSearchCallResponseItem wscri:
                             // The WebSearchToolCallContent has already been yielded as part of in-progress updates.
                             // Yield a second one here with queries populated, which coalescing will merge with the first.
-                            yield return CreateUpdate(new WebSearchToolCallContent(wscri.Id)
+                            var webSearchSyntheticId = GetOrCreateSyntheticCallId(ref syntheticCallIds, wscri.Id);
+                            yield return CreateUpdate(new WebSearchToolCallContent(webSearchSyntheticId)
                             {
                                 Queries = GetWebSearchQueries(wscri),
                             });
 
                             // Also yield the WebSearchToolResultContent.
-                            yield return CreateUpdate(new WebSearchToolResultContent(wscri.Id)
+                            yield return CreateUpdate(new WebSearchToolResultContent(webSearchSyntheticId)
                             {
                                 Results = GetWebSearchSources(wscri),
                                 RawRepresentation = wscri,
@@ -595,8 +600,9 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                         // FileSearch items contain both the call and results inline, so we emit a call+result pair.
                         // ComputerCall results arrive as a separate ComputerCallOutputResponseItem.
                         case FileSearchCallResponseItem:
-                            var toolCallUpdate = CreateUpdate(new ToolCallContent(outputItemDoneUpdate.Item.Id));
-                            toolCallUpdate.Contents.Add(new ToolResultContent(outputItemDoneUpdate.Item.Id) { RawRepresentation = outputItemDoneUpdate.Item });
+                            var fileSearchSyntheticId = Guid.NewGuid().ToString("N");
+                            var toolCallUpdate = CreateUpdate(new ToolCallContent(fileSearchSyntheticId));
+                            toolCallUpdate.Contents.Add(new ToolResultContent(fileSearchSyntheticId) { RawRepresentation = outputItemDoneUpdate.Item });
                             yield return toolCallUpdate;
                             break;
 
@@ -1588,10 +1594,25 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
         return results;
     }
 
+    /// <summary>Gets or creates a synthetic CallId for the given wire item id.</summary>
+    private static string GetOrCreateSyntheticCallId(ref Dictionary<string, string>? syntheticCallIds, string wireItemId)
+    {
+        syntheticCallIds ??= new(StringComparer.Ordinal);
+
+        if (!syntheticCallIds.TryGetValue(wireItemId, out string? callId))
+        {
+            callId = Guid.NewGuid().ToString("N");
+            syntheticCallIds[wireItemId] = callId;
+        }
+
+        return callId;
+    }
+
     /// <summary>Adds new <see cref="AIContent"/> for the specified <paramref name="mtci"/> into <paramref name="contents"/>.</summary>
     private static void AddMcpToolCallContent(McpToolCallItem mtci, IList<AIContent> contents)
     {
-        contents.Add(new McpServerToolCallContent(mtci.Id, mtci.ToolName, mtci.ServerLabel)
+        var mcpCallId = Guid.NewGuid().ToString("N");
+        contents.Add(new McpServerToolCallContent(mcpCallId, mtci.ToolName, mtci.ServerLabel)
         {
             Arguments = JsonSerializer.Deserialize(mtci.ToolArguments, OpenAIJsonContext.Default.IDictionaryStringObject),
 
@@ -1600,7 +1621,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
             // McpToolCallItem sent back for the pair.
         });
 
-        contents.Add(new McpServerToolResultContent(mtci.Id)
+        contents.Add(new McpServerToolResultContent(mcpCallId)
         {
             RawRepresentation = mtci,
             Outputs = [mtci.Error is not null ?
@@ -1619,7 +1640,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
     }
 
     /// <summary>Creates a <see cref="CodeInterpreterToolResultContent"/> for the specified <paramref name="cicri"/>.</summary>
-    private static CodeInterpreterToolResultContent CreateCodeInterpreterResultContent(CodeInterpreterCallResponseItem cicri)
+    private static CodeInterpreterToolResultContent CreateCodeInterpreterResultContent(CodeInterpreterCallResponseItem cicri, string callId)
     {
         List<AIContent>? outputContents = null;
 
@@ -1652,7 +1673,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
             }
         }
 
-        return new(cicri.Id)
+        return new(callId)
         {
             Outputs = outputContents,
             RawRepresentation = cicri,
@@ -1714,26 +1735,26 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
         }
     }
 
-    private static void AddImageGenerationContents(ImageGenerationCallResponseItem outputItem, CreateResponseOptions? options, IList<AIContent> contents)
+    private static void AddImageGenerationContents(ImageGenerationCallResponseItem outputItem, CreateResponseOptions? options, IList<AIContent> contents, string callId)
     {
         var imageGenTool = options?.Tools.OfType<ImageGenerationTool>().FirstOrDefault();
         string outputFormat = imageGenTool?.OutputFileFormat?.ToString() ?? "png";
 
-        contents.Add(new ImageGenerationToolCallContent(outputItem.Id));
+        contents.Add(new ImageGenerationToolCallContent(callId));
 
-        contents.Add(new ImageGenerationToolResultContent(outputItem.Id)
+        contents.Add(new ImageGenerationToolResultContent(callId)
         {
             RawRepresentation = outputItem,
             Outputs = [new DataContent(outputItem.ImageResultBytes, $"image/{outputFormat}")]
         });
     }
 
-    private static ImageGenerationToolResultContent GetImageGenerationResult(StreamingResponseImageGenerationCallPartialImageUpdate update, CreateResponseOptions? options)
+    private static ImageGenerationToolResultContent GetImageGenerationResult(StreamingResponseImageGenerationCallPartialImageUpdate update, CreateResponseOptions? options, string callId)
     {
         var imageGenTool = options?.Tools.OfType<ImageGenerationTool>().FirstOrDefault();
         var outputType = imageGenTool?.OutputFileFormat?.ToString() ?? "png";
 
-        return new ImageGenerationToolResultContent(update.ItemId)
+        return new ImageGenerationToolResultContent(callId)
         {
             RawRepresentation = update,
             Outputs =

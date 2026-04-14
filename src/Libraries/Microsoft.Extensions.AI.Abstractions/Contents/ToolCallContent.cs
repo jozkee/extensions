@@ -22,6 +22,7 @@ namespace Microsoft.Extensions.AI;
 // [JsonDerivedType(typeof(CodeInterpreterToolCallContent), "codeInterpreterToolCall")]
 // [JsonDerivedType(typeof(ImageGenerationToolCallContent), "imageGenerationToolCall")]
 // [JsonDerivedType(typeof(WebSearchToolCallContent), "webSearchToolCall")]
+// [JsonDerivedType(typeof(ToolSearchCallContent), "toolSearchCall")]
 public class ToolCallContent : AIContent
 {
     /// <summary>

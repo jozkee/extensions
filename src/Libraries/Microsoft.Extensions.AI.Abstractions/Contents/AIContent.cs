@@ -38,6 +38,8 @@ namespace Microsoft.Extensions.AI;
 // [JsonDerivedType(typeof(ImageGenerationToolResultContent), typeDiscriminator: "imageGenerationToolResult")]
 // [JsonDerivedType(typeof(WebSearchToolCallContent), typeDiscriminator: "webSearchToolCall")]
 // [JsonDerivedType(typeof(WebSearchToolResultContent), typeDiscriminator: "webSearchToolResult")]
+// [JsonDerivedType(typeof(ToolSearchCallContent), typeDiscriminator: "toolSearchCall")]
+// [JsonDerivedType(typeof(ToolSearchResultContent), typeDiscriminator: "toolSearchResult")]
 
 public class AIContent
 {

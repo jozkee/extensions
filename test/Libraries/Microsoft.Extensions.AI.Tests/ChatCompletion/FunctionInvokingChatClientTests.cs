@@ -2183,6 +2183,180 @@ public class FunctionInvokingChatClientTests
         Assert.Contains(response.Messages, m => m.Contents.Any(c => c is FunctionResultContent frc && frc.CallId == "callId1"));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ToolSearchFunction_IsInvokedByFICC(bool streaming)
+    {
+        // Arrange: Create a ToolSearchFunction that returns a list of tools
+        var discoveredTools = new List<AITool>
+        {
+            AIFunctionFactory.Create(() => "weather result", "GetWeather"),
+        };
+
+        var schema = JsonDocument.Parse("""{"type":"object","properties":{"query":{"type":"string"}}}""").RootElement;
+        AIFunctionArguments? capturedArgs = null;
+
+        var searchFunction = new ToolSearchFunction(
+            "Search for tools",
+            schema,
+            (args) =>
+            {
+                capturedArgs = args;
+                return discoveredTools;
+            });
+
+        var options = new ChatOptions
+        {
+            Tools = [searchFunction]
+        };
+
+        using var innerClient = new TestChatClient
+        {
+            GetResponseAsyncCallback = (msgs, opts, ct) =>
+            {
+                // First call: model issues a ToolSearchCallContent
+                var toolMessage = msgs.FirstOrDefault(m => m.Role == ChatRole.Tool);
+                if (toolMessage is null)
+                {
+                    return Task.FromResult(new ChatResponse(
+                        new ChatMessage(ChatRole.Assistant,
+                        [
+                            new ToolSearchCallContent("ts_call1", "tool_search", new Dictionary<string, object?> { ["query"] = "weather" })
+                        ])));
+                }
+
+                // Second call: model sees the result and responds
+                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "Here's the weather info.")));
+            },
+            GetStreamingResponseAsyncCallback = (msgs, opts, ct) =>
+            {
+                var toolMessage = msgs.FirstOrDefault(m => m.Role == ChatRole.Tool);
+                if (toolMessage is null)
+                {
+                    return YieldAsync(new ChatResponse(
+                        new ChatMessage(ChatRole.Assistant,
+                        [
+                            new ToolSearchCallContent("ts_call1", "tool_search", new Dictionary<string, object?> { ["query"] = "weather" })
+                        ])).ToChatResponseUpdates());
+                }
+
+                return YieldAsync(new ChatResponse(new ChatMessage(ChatRole.Assistant, "Here's the weather info.")).ToChatResponseUpdates());
+            }
+        };
+
+        using var client = new FunctionInvokingChatClient(innerClient);
+
+        // Act
+        ChatResponse response;
+        if (streaming)
+        {
+            response = await client.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "what's the weather?")], options).ToChatResponseAsync();
+        }
+        else
+        {
+            response = await client.GetResponseAsync([new ChatMessage(ChatRole.User, "what's the weather?")], options);
+        }
+
+        // Assert: The search function was invoked with the arguments
+        Assert.NotNull(capturedArgs);
+        Assert.Equal("weather", capturedArgs["query"]?.ToString());
+
+        // Assert: The tool message contains a FunctionResultContent (FICC wraps the IList<AITool> result)
+        var toolMsg = response.Messages.First(m => m.Role == ChatRole.Tool);
+        var resultContent = Assert.Single(toolMsg.Contents.OfType<FunctionResultContent>());
+        Assert.Equal("ts_call1", resultContent.CallId);
+
+        // The result is the IList<AITool> returned by the search function (wrapped in plain FunctionResultContent)
+        Assert.IsAssignableFrom<IList<AITool>>(resultContent.Result);
+
+        // Assert: Final assistant response is present
+        Assert.Contains(response.Messages, m => m.Role == ChatRole.Assistant && m.Text.Contains("weather info"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ToolSearchCallContent_MarkedInformationalOnly_WhenServerHandled(bool streaming)
+    {
+        // Arrange: Simulate a server that returns both ToolSearchCallContent and a matching FunctionResultContent
+        // (server already handled the search). FICC should mark the call as InformationalOnly and NOT invoke.
+        var schema = JsonDocument.Parse("""{"type":"object","properties":{"query":{"type":"string"}}}""").RootElement;
+        bool searchFunctionInvoked = false;
+
+        var searchFunction = new ToolSearchFunction(
+            "Search for tools",
+            schema,
+            (args) =>
+            {
+                searchFunctionInvoked = true;
+                return Array.Empty<AITool>();
+            });
+
+        var options = new ChatOptions
+        {
+            Tools = [searchFunction]
+        };
+
+        using var innerClient = new TestChatClient
+        {
+            GetResponseAsyncCallback = (msgs, opts, ct) =>
+            {
+                // Return both the call and the result in the same response (server-handled)
+                return Task.FromResult(new ChatResponse(
+                [
+                    new ChatMessage(ChatRole.Assistant,
+                    [
+                        new ToolSearchCallContent("ts_call1", "tool_search", new Dictionary<string, object?> { ["query"] = "email" })
+                    ]),
+                    new ChatMessage(ChatRole.Tool,
+                    [
+                        new FunctionResultContent("ts_call1", "server handled result")
+                    ]),
+                    new ChatMessage(ChatRole.Assistant, "Done."),
+                ]));
+            },
+            GetStreamingResponseAsyncCallback = (msgs, opts, ct) =>
+            {
+                return YieldAsync(new ChatResponse(
+                [
+                    new ChatMessage(ChatRole.Assistant,
+                    [
+                        new ToolSearchCallContent("ts_call1", "tool_search", new Dictionary<string, object?> { ["query"] = "email" })
+                    ]),
+                    new ChatMessage(ChatRole.Tool,
+                    [
+                        new FunctionResultContent("ts_call1", "server handled result")
+                    ]),
+                    new ChatMessage(ChatRole.Assistant, "Done."),
+                ]).ToChatResponseUpdates());
+            }
+        };
+
+        using var client = new FunctionInvokingChatClient(innerClient);
+
+        // Act
+        ChatResponse response;
+        if (streaming)
+        {
+            response = await client.GetStreamingResponseAsync([new ChatMessage(ChatRole.User, "test")], options).ToChatResponseAsync();
+        }
+        else
+        {
+            response = await client.GetResponseAsync([new ChatMessage(ChatRole.User, "test")], options);
+        }
+
+        // Assert: FICC should NOT have invoked the search function since the server already handled it
+        Assert.False(searchFunctionInvoked, "ToolSearchFunction should not be invoked when server already handled the call");
+
+        // Assert: The ToolSearchCallContent should be marked InformationalOnly
+        var callContent = response.Messages
+            .SelectMany(m => m.Contents)
+            .OfType<ToolSearchCallContent>()
+            .Single();
+        Assert.True(callContent.InformationalOnly);
+    }
+
     private sealed class CustomSynchronizationContext : SynchronizationContext
     {
         public override void Post(SendOrPostCallback d, object? state)

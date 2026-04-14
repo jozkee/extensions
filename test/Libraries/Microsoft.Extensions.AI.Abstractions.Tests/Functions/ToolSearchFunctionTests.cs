@@ -204,4 +204,57 @@ public class ToolSearchFunctionTests
 
         Assert.Equal(customSchema, func.JsonSchema);
     }
+
+    [Fact]
+    public void Factory_Async_CreatesToolSearchFunction()
+    {
+        var func = AIFunctionFactory.CreateToolSearch(
+            "Search for tools by keyword",
+            _testSchema,
+            (args, ct) => new ValueTask<IList<AITool>>(Array.Empty<AITool>()));
+
+        Assert.IsType<ToolSearchFunction>(func);
+        Assert.Equal("tool_search", func.Name);
+        Assert.Equal("Search for tools by keyword", func.Description);
+    }
+
+    [Fact]
+    public void Factory_Sync_CreatesToolSearchFunction()
+    {
+        var func = AIFunctionFactory.CreateToolSearch(
+            "Search for tools",
+            _testSchema,
+            (args) => Array.Empty<AITool>());
+
+        Assert.IsType<ToolSearchFunction>(func);
+        Assert.Equal("tool_search", func.Name);
+        Assert.Equal("Search for tools", func.Description);
+    }
+
+    [Fact]
+    public void Factory_CustomName()
+    {
+        var func = AIFunctionFactory.CreateToolSearch(
+            "desc",
+            _testSchema,
+            (args) => Array.Empty<AITool>(),
+            name: "my_search");
+
+        Assert.Equal("my_search", func.Name);
+    }
+
+    [Fact]
+    public async Task Factory_InvokeAsync_ReturnsToolList()
+    {
+        var expectedTools = new List<AITool> { new HostedWebSearchTool() };
+        var func = AIFunctionFactory.CreateToolSearch(
+            "Search tools",
+            _testSchema,
+            (args) => expectedTools);
+
+        var result = await func.InvokeAsync(new AIFunctionArguments { ["query"] = "web" });
+
+        var tools = Assert.IsAssignableFrom<IList<AITool>>(result);
+        Assert.Same(expectedTools, tools);
+    }
 }

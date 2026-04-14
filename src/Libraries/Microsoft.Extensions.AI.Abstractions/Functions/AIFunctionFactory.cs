@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 #if !NET
 using System.Linq;
@@ -20,6 +21,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Shared.Collections;
+using Microsoft.Shared.DiagnosticIds;
 using Microsoft.Shared.Diagnostics;
 
 #pragma warning disable S3011 // Reflection should not be used to increase accessibility of classes, methods, or fields
@@ -514,6 +516,38 @@ public static partial class AIFunctionFactory
             description ?? string.Empty,
             jsonSchema,
             returnJsonSchema);
+
+    /// <summary>Creates a <see cref="ToolSearchFunction"/> that wraps an asynchronous search delegate.</summary>
+    /// <param name="description">A description of the tool search function, suitable for use in describing the purpose to a model.</param>
+    /// <param name="parametersSchema">A JSON schema describing the function's input parameters.</param>
+    /// <param name="searchFunc">The asynchronous search delegate that returns tools matching the search criteria.</param>
+    /// <param name="name">The name of the tool search function. Defaults to <c>"tool_search"</c> if not specified.</param>
+    /// <returns>The created <see cref="ToolSearchFunction"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="description"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="searchFunc"/> is <see langword="null"/>.</exception>
+    [Experimental(DiagnosticIds.Experiments.AIToolSearch, UrlFormat = DiagnosticIds.UrlFormat)]
+    public static ToolSearchFunction CreateToolSearch(
+        string description,
+        JsonElement parametersSchema,
+        Func<AIFunctionArguments, CancellationToken, ValueTask<IList<AITool>>> searchFunc,
+        string? name = null) =>
+        new(description, parametersSchema, searchFunc, name);
+
+    /// <summary>Creates a <see cref="ToolSearchFunction"/> that wraps a synchronous search delegate.</summary>
+    /// <param name="description">A description of the tool search function, suitable for use in describing the purpose to a model.</param>
+    /// <param name="parametersSchema">A JSON schema describing the function's input parameters.</param>
+    /// <param name="searchFunc">The synchronous search delegate that returns tools matching the search criteria.</param>
+    /// <param name="name">The name of the tool search function. Defaults to <c>"tool_search"</c> if not specified.</param>
+    /// <returns>The created <see cref="ToolSearchFunction"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="description"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="searchFunc"/> is <see langword="null"/>.</exception>
+    [Experimental(DiagnosticIds.Experiments.AIToolSearch, UrlFormat = DiagnosticIds.UrlFormat)]
+    public static ToolSearchFunction CreateToolSearch(
+        string description,
+        JsonElement parametersSchema,
+        Func<AIFunctionArguments, IList<AITool>> searchFunc,
+        string? name = null) =>
+        new(description, parametersSchema, searchFunc, name);
 
     private sealed class DefaultAIFunctionDeclaration(
         string name, string description, JsonElement jsonSchema, JsonElement? returnJsonSchema) :

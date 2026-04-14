@@ -7737,4 +7737,187 @@ public class OpenAIResponseClientTests
         Assert.NotNull(response);
         Assert.Equal("Hello!", response.Text);
     }
+
+    [Fact]
+    public async Task ToolSearchFunction_NonStreaming()
+    {
+        const string Input = """
+            {
+                "model": "gpt-4o-mini",
+                "input": [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": "Find tools for weather"
+                            }
+                        ]
+                    }
+                ],
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "tool_search",
+                        "description": "Searches for relevant tools based on user query.",
+                        "parameters": {
+                            "type": "object",
+                            "required": [
+                                "query"
+                            ],
+                            "properties": {
+                                "query": {
+                                    "type": "string"
+                                }
+                            },
+                            "additionalProperties": false
+                        },
+                        "strict": null
+                    }
+                ]
+            }
+            """;
+
+        const string Output = """
+            {
+              "id": "resp_toolsearch1",
+              "object": "response",
+              "created_at": 1741892091,
+              "status": "completed",
+              "model": "gpt-4o-mini",
+              "output": [
+                {
+                  "type": "function_call",
+                  "id": "fc_ts1",
+                  "call_id": "call_toolsearch1",
+                  "name": "tool_search",
+                  "arguments": "{\"query\":\"weather\"}",
+                  "status": "completed"
+                }
+              ],
+              "usage": {
+                "input_tokens": 50,
+                "output_tokens": 15,
+                "total_tokens": 65
+              }
+            }
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateResponseClient(httpClient, "gpt-4o-mini");
+
+        var schema = JsonDocument.Parse("""{"type":"object","required":["query"],"properties":{"query":{"type":"string"}},"additionalProperties":false}""").RootElement;
+
+        var response = await client.GetResponseAsync("Find tools for weather", new()
+        {
+            Tools =
+            [
+                new ToolSearchFunction(
+                    "Searches for relevant tools based on user query.",
+                    schema,
+                    (args) => Array.Empty<AITool>()) // delegate doesn't matter for wire-format test
+            ],
+        });
+        Assert.NotNull(response);
+
+        FunctionCallContent fcc = Assert.IsType<FunctionCallContent>(response.Messages.Single().Contents.Single());
+        Assert.Equal("tool_search", fcc.Name);
+        Assert.Equal("call_toolsearch1", fcc.CallId);
+        AssertExtensions.EqualFunctionCallParameters(new Dictionary<string, object?> { ["query"] = "weather" }, fcc.Arguments);
+    }
+
+    [Fact]
+    public async Task ToolSearchFunction_Streaming()
+    {
+        const string Input = """
+            {
+                "model": "gpt-4o-mini",
+                "input": [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": "Find tools for weather"
+                            }
+                        ]
+                    }
+                ],
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "tool_search",
+                        "description": "Searches for relevant tools based on user query.",
+                        "parameters": {
+                            "type": "object",
+                            "required": [
+                                "query"
+                            ],
+                            "properties": {
+                                "query": {
+                                    "type": "string"
+                                }
+                            },
+                            "additionalProperties": false
+                        },
+                        "strict": null
+                    }
+                ],
+                "stream": true
+            }
+            """;
+
+        const string Output = """
+            event: response.created
+            data: {"type":"response.created","response":{"id":"resp_toolsearch2","object":"response","created_at":1741892091,"status":"in_progress","model":"gpt-4o-mini","output":[]}}
+
+            event: response.in_progress
+            data: {"type":"response.in_progress","response":{"id":"resp_toolsearch2","object":"response","created_at":1741892091,"status":"in_progress","model":"gpt-4o-mini","output":[]}}
+
+            event: response.output_item.added
+            data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_ts2","call_id":"call_toolsearch2","name":"tool_search","arguments":"","status":"in_progress"}}
+
+            event: response.function_call_arguments.delta
+            data: {"type":"response.function_call_arguments.delta","item_id":"fc_ts2","output_index":0,"delta":"{\"query\":\"weather\"}"}
+
+            event: response.function_call_arguments.done
+            data: {"type":"response.function_call_arguments.done","item_id":"fc_ts2","output_index":0,"arguments":"{\"query\":\"weather\"}"}
+
+            event: response.output_item.done
+            data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_ts2","call_id":"call_toolsearch2","name":"tool_search","arguments":"{\"query\":\"weather\"}","status":"completed"}}
+
+            event: response.completed
+            data: {"type":"response.completed","response":{"id":"resp_toolsearch2","object":"response","created_at":1741892091,"status":"completed","model":"gpt-4o-mini","output":[{"type":"function_call","id":"fc_ts2","call_id":"call_toolsearch2","name":"tool_search","arguments":"{\"query\":\"weather\"}","status":"completed"}],"usage":{"input_tokens":50,"output_tokens":15,"total_tokens":65}}}
+
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateResponseClient(httpClient, "gpt-4o-mini");
+
+        var schema = JsonDocument.Parse("""{"type":"object","required":["query"],"properties":{"query":{"type":"string"}},"additionalProperties":false}""").RootElement;
+
+        List<ChatResponseUpdate> updates = [];
+        await foreach (var update in client.GetStreamingResponseAsync("Find tools for weather", new()
+        {
+            Tools =
+            [
+                new ToolSearchFunction(
+                    "Searches for relevant tools based on user query.",
+                    schema,
+                    (args) => Array.Empty<AITool>())
+            ],
+        }))
+        {
+            updates.Add(update);
+        }
+
+        var fcc = updates.SelectMany(u => u.Contents).OfType<FunctionCallContent>().Single();
+        Assert.Equal("call_toolsearch2", fcc.CallId);
+        Assert.Equal("tool_search", fcc.Name);
+        AssertExtensions.EqualFunctionCallParameters(new Dictionary<string, object?> { ["query"] = "weather" }, fcc.Arguments);
+    }
 }

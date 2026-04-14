@@ -925,4 +925,42 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
         Assert.Contains(rawJsons, json => json.Contains("\"type\":\"tool_search_call\"") || json.Contains("\"type\": \"tool_search_call\""));
         Assert.Contains(rawJsons, json => json.Contains("\"type\":\"tool_search_output\"") || json.Contains("\"type\": \"tool_search_output\""));
     }
+
+    [ConditionalTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FunctionInvocation_WithToolSearchFunction(bool streaming)
+    {
+        SkipIfNotEnabled();
+
+        using var chatClient = new FunctionInvokingChatClient(ChatClient);
+
+        var schema = JsonDocument.Parse("""{"type":"object","required":["query"],"properties":{"query":{"type":"string"}},"additionalProperties":false}""").RootElement;
+
+        bool searchInvoked = false;
+        var searchFunction = new ToolSearchFunction(
+            "Search for available tools that can help with a given topic. Call this to discover what functions are available.",
+            schema,
+            (args) =>
+            {
+                searchInvoked = true;
+                return new AITool[]
+                {
+                    AIFunctionFactory.Create(() => 42, "GetSecretNumber", "Returns the current secret number"),
+                };
+            });
+
+        var response = streaming
+            ? await chatClient.GetStreamingResponseAsync("What is the current secret number? Use the tool_search function first to find relevant tools.", new()
+            {
+                Tools = [searchFunction]
+            }).ToChatResponseAsync()
+            : await chatClient.GetResponseAsync("What is the current secret number? Use the tool_search function first to find relevant tools.", new()
+            {
+                Tools = [searchFunction]
+            });
+
+        Assert.True(searchInvoked, "ToolSearchFunction should have been invoked by the model");
+        Assert.NotEmpty(response.Text);
+    }
 }

@@ -7758,8 +7758,8 @@ public class OpenAIResponseClientTests
                 ],
                 "tools": [
                     {
-                        "type": "function",
-                        "name": "tool_search",
+                        "type": "tool_search",
+                        "execution": "client",
                         "description": "Searches for relevant tools based on user query.",
                         "parameters": {
                             "type": "object",
@@ -7772,8 +7772,7 @@ public class OpenAIResponseClientTests
                                 }
                             },
                             "additionalProperties": false
-                        },
-                        "strict": null
+                        }
                     }
                 ]
             }
@@ -7788,12 +7787,13 @@ public class OpenAIResponseClientTests
               "model": "gpt-4o-mini",
               "output": [
                 {
-                  "type": "function_call",
-                  "id": "fc_ts1",
+                  "type": "tool_search_call",
+                  "execution": "client",
                   "call_id": "call_toolsearch1",
-                  "name": "tool_search",
-                  "arguments": "{\"query\":\"weather\"}",
-                  "status": "completed"
+                  "status": "completed",
+                  "arguments": {
+                    "query": "weather"
+                  }
                 }
               ],
               "usage": {
@@ -7822,10 +7822,10 @@ public class OpenAIResponseClientTests
         });
         Assert.NotNull(response);
 
-        FunctionCallContent fcc = Assert.IsType<FunctionCallContent>(response.Messages.Single().Contents.Single());
-        Assert.Equal("tool_search", fcc.Name);
-        Assert.Equal("call_toolsearch1", fcc.CallId);
-        AssertExtensions.EqualFunctionCallParameters(new Dictionary<string, object?> { ["query"] = "weather" }, fcc.Arguments);
+        ToolSearchCallContent tscc = Assert.IsType<ToolSearchCallContent>(response.Messages.Single().Contents.Single());
+        Assert.Equal("tool_search", tscc.Name);
+        Assert.Equal("call_toolsearch1", tscc.CallId);
+        AssertExtensions.EqualFunctionCallParameters(new Dictionary<string, object?> { ["query"] = "weather" }, tscc.Arguments);
     }
 
     [Fact]
@@ -7848,8 +7848,8 @@ public class OpenAIResponseClientTests
                 ],
                 "tools": [
                     {
-                        "type": "function",
-                        "name": "tool_search",
+                        "type": "tool_search",
+                        "execution": "client",
                         "description": "Searches for relevant tools based on user query.",
                         "parameters": {
                             "type": "object",
@@ -7862,8 +7862,7 @@ public class OpenAIResponseClientTests
                                 }
                             },
                             "additionalProperties": false
-                        },
-                        "strict": null
+                        }
                     }
                 ],
                 "stream": true
@@ -7878,19 +7877,13 @@ public class OpenAIResponseClientTests
             data: {"type":"response.in_progress","response":{"id":"resp_toolsearch2","object":"response","created_at":1741892091,"status":"in_progress","model":"gpt-4o-mini","output":[]}}
 
             event: response.output_item.added
-            data: {"type":"response.output_item.added","output_index":0,"item":{"type":"function_call","id":"fc_ts2","call_id":"call_toolsearch2","name":"tool_search","arguments":"","status":"in_progress"}}
-
-            event: response.function_call_arguments.delta
-            data: {"type":"response.function_call_arguments.delta","item_id":"fc_ts2","output_index":0,"delta":"{\"query\":\"weather\"}"}
-
-            event: response.function_call_arguments.done
-            data: {"type":"response.function_call_arguments.done","item_id":"fc_ts2","output_index":0,"arguments":"{\"query\":\"weather\"}"}
+            data: {"type":"response.output_item.added","output_index":0,"item":{"type":"tool_search_call","execution":"client","call_id":"call_toolsearch2","status":"in_progress","arguments":{}}}
 
             event: response.output_item.done
-            data: {"type":"response.output_item.done","output_index":0,"item":{"type":"function_call","id":"fc_ts2","call_id":"call_toolsearch2","name":"tool_search","arguments":"{\"query\":\"weather\"}","status":"completed"}}
+            data: {"type":"response.output_item.done","output_index":0,"item":{"type":"tool_search_call","execution":"client","call_id":"call_toolsearch2","status":"completed","arguments":{"query":"weather"}}}
 
             event: response.completed
-            data: {"type":"response.completed","response":{"id":"resp_toolsearch2","object":"response","created_at":1741892091,"status":"completed","model":"gpt-4o-mini","output":[{"type":"function_call","id":"fc_ts2","call_id":"call_toolsearch2","name":"tool_search","arguments":"{\"query\":\"weather\"}","status":"completed"}],"usage":{"input_tokens":50,"output_tokens":15,"total_tokens":65}}}
+            data: {"type":"response.completed","response":{"id":"resp_toolsearch2","object":"response","created_at":1741892091,"status":"completed","model":"gpt-4o-mini","output":[{"type":"tool_search_call","execution":"client","call_id":"call_toolsearch2","status":"completed","arguments":{"query":"weather"}}],"usage":{"input_tokens":50,"output_tokens":15,"total_tokens":65}}}
 
             """;
 
@@ -7915,9 +7908,9 @@ public class OpenAIResponseClientTests
             updates.Add(update);
         }
 
-        var fcc = updates.SelectMany(u => u.Contents).OfType<FunctionCallContent>().Single();
-        Assert.Equal("call_toolsearch2", fcc.CallId);
-        Assert.Equal("tool_search", fcc.Name);
-        AssertExtensions.EqualFunctionCallParameters(new Dictionary<string, object?> { ["query"] = "weather" }, fcc.Arguments);
+        var tscc = updates.SelectMany(u => u.Contents).OfType<ToolSearchCallContent>().Single();
+        Assert.Equal("call_toolsearch2", tscc.CallId);
+        Assert.Equal("tool_search", tscc.Name);
+        AssertExtensions.EqualFunctionCallParameters(new Dictionary<string, object?> { ["query"] = "weather" }, tscc.Arguments);
     }
 }

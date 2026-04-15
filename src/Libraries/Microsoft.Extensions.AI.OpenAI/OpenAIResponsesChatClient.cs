@@ -302,7 +302,15 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                     break;
 
                 default:
-                    message.Contents.Add(new() { RawRepresentation = outputItem });
+                    if (TryParseToolSearchCall(outputItem, out var toolSearchCall))
+                    {
+                        message.Contents.Add(toolSearchCall);
+                    }
+                    else
+                    {
+                        message.Contents.Add(new() { RawRepresentation = outputItem });
+                    }
+
                     break;
             }
         }
@@ -457,6 +465,15 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                         case FunctionCallResponseItem fcri:
                             anyFunctions = true;
                             lastRole = ChatRole.Assistant;
+                            break;
+
+                        default:
+                            if (IsToolSearchCallItem(outputItemAddedUpdate.Item))
+                            {
+                                anyFunctions = true;
+                                lastRole = ChatRole.Assistant;
+                            }
+
                             break;
                     }
 
@@ -619,7 +636,15 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
 
                         // For everything else, yield an AIContent for the ResponseItem.
                         default:
-                            yield return CreateUpdate(new AIContent { RawRepresentation = outputItemDoneUpdate.Item });
+                            if (TryParseToolSearchCall(outputItemDoneUpdate.Item, out var streamToolSearchCall))
+                            {
+                                yield return CreateUpdate(streamToolSearchCall);
+                            }
+                            else
+                            {
+                                yield return CreateUpdate(new AIContent { RawRepresentation = outputItemDoneUpdate.Item });
+                            }
+
                             break;
                     }
                     break;
@@ -709,6 +734,14 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
         {
             case ResponseToolAITool rtat:
                 return rtat.Tool;
+
+            case ToolSearchFunction tsf:
+                // Client-executed tool search: model emits tool_search_call, client handles lookup.
+                var toolSearchTool = ModelReaderWriter.Read<ResponseTool>(BinaryData.FromString("""{"type": "tool_search"}"""), ModelReaderWriterOptions.Json, OpenAIContext.Default)!;
+                toolSearchTool.Patch.Set("$.execution"u8, "\"client\""u8);
+                toolSearchTool.Patch.Set("$.description"u8, JsonSerializer.SerializeToUtf8Bytes(tsf.Description, OpenAIJsonContext.Default.String).AsSpan());
+                toolSearchTool.Patch.Set("$.parameters"u8, JsonSerializer.SerializeToUtf8Bytes(tsf.JsonSchema, OpenAIJsonContext.Default.JsonElement).AsSpan());
+                return toolSearchTool;
 
             case AIFunctionDeclaration aiFunction:
                 var functionTool = ToResponseTool(aiFunction, options);
@@ -1220,6 +1253,10 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                             yield return ResponseItem.CreateMcpApprovalResponseItem(toolResp.RequestId, toolResp.Approved);
                             break;
 
+                        case FunctionResultContent resultContent when resultContent.Result is IList<AITool> tools:
+                            yield return CreateToolSearchOutputItem(resultContent.CallId, tools, options);
+                            break;
+
                         case FunctionResultContent resultContent:
                             static FunctionCallOutputResponseItem SerializeAIContent(string callId, IEnumerable<AIContent> contents)
                             {
@@ -1363,6 +1400,14 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
 
                         case McpServerToolCallContent mstcc:
                             (idToContentMapping ??= [])[mstcc.CallId] = mstcc;
+                            break;
+
+                        case ToolSearchCallContent tscc when tscc.RawRepresentation is ResponseItem tsccRaw:
+                            yield return tsccRaw;
+                            break;
+
+                        case ToolSearchCallContent tscc:
+                            yield return CreateToolSearchCallItem(tscc);
                             break;
 
                         case FunctionCallContent callContent:
@@ -1654,6 +1699,117 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
         {
             filter.ToolNames.Add(toolName);
         }
+    }
+
+    /// <summary>
+    /// Checks whether a <see cref="ResponseItem"/> is a <c>tool_search_call</c> item by examining
+    /// its serialized JSON. The OpenAI .NET SDK does not yet have a typed class for this item type.
+    /// </summary>
+    private static bool IsToolSearchCallItem(ResponseItem item)
+    {
+        BinaryData data = ModelReaderWriter.Write(item, ModelReaderWriterOptions.Json, OpenAIContext.Default);
+        using var doc = JsonDocument.Parse(data);
+        return doc.RootElement.TryGetProperty("type", out var typeEl)
+            && typeEl.ValueEquals("tool_search_call");
+    }
+
+    /// <summary>
+    /// Attempts to parse a <see cref="ResponseItem"/> as a client-executed <c>tool_search_call</c>
+    /// and converts it to a <see cref="ToolSearchCallContent"/>.
+    /// </summary>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Best-effort parsing of untyped SDK item")]
+    private static bool TryParseToolSearchCall(
+        ResponseItem item,
+        [NotNullWhen(true)] out ToolSearchCallContent? content)
+    {
+        content = null;
+
+        try
+        {
+            BinaryData data = ModelReaderWriter.Write(item, ModelReaderWriterOptions.Json, OpenAIContext.Default);
+            using var doc = JsonDocument.Parse(data);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("type", out var typeEl) || !typeEl.ValueEquals("tool_search_call"))
+            {
+                return false;
+            }
+
+            string? callId = root.TryGetProperty("call_id", out var callIdEl) ? callIdEl.GetString() : null;
+            IDictionary<string, object?>? arguments = null;
+            if (root.TryGetProperty("arguments", out var argsEl) && argsEl.ValueKind == JsonValueKind.Object)
+            {
+                arguments = JsonSerializer.Deserialize(argsEl.GetRawText(), OpenAIJsonContext.Default.IDictionaryStringObject);
+            }
+
+            content = new ToolSearchCallContent(callId ?? string.Empty, "tool_search", arguments)
+            {
+                RawRepresentation = item,
+            };
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Creates a <c>tool_search_output</c> <see cref="ResponseItem"/> for the client-executed tool search result.
+    /// Each <see cref="AITool"/> is serialized as a deferred function tool definition.
+    /// </summary>
+    private static ResponseItem CreateToolSearchOutputItem(string callId, IList<AITool> tools, ChatOptions? options)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("type", "tool_search_output");
+            writer.WriteString("execution", "client");
+            writer.WriteString("call_id", callId);
+            writer.WriteString("status", "completed");
+            writer.WriteStartArray("tools");
+            foreach (var tool in tools)
+            {
+                if (ToResponseTool(tool, options) is { } responseTool)
+                {
+                    responseTool.Patch.Set("$.defer_loading"u8, "true"u8);
+                    var toolData = ModelReaderWriter.Write(responseTool, ModelReaderWriterOptions.Json, OpenAIContext.Default);
+                    writer.WriteRawValue(toolData);
+                }
+            }
+
+            writer.WriteEndArray();
+            writer.WriteEndObject();
+        }
+
+        return ModelReaderWriter.Read<ResponseItem>(BinaryData.FromBytes(stream.ToArray()), ModelReaderWriterOptions.Json, OpenAIContext.Default)!;
+    }
+
+    /// <summary>
+    /// Creates a <c>tool_search_call</c> <see cref="ResponseItem"/> for roundtripping a <see cref="ToolSearchCallContent"/>
+    /// when the original raw representation is not available.
+    /// </summary>
+    private static ResponseItem CreateToolSearchCallItem(ToolSearchCallContent content)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("type", "tool_search_call");
+            writer.WriteString("execution", "client");
+            writer.WriteString("call_id", content.CallId);
+            writer.WriteString("status", "completed");
+            if (content.Arguments is not null)
+            {
+                writer.WritePropertyName("arguments");
+                JsonSerializer.Serialize(writer, content.Arguments, AIJsonUtilities.DefaultOptions.GetTypeInfo(typeof(IDictionary<string, object?>)));
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return ModelReaderWriter.Read<ResponseItem>(BinaryData.FromBytes(stream.ToArray()), ModelReaderWriterOptions.Json, OpenAIContext.Default)!;
     }
 
     /// <summary>Creates a <see cref="CodeInterpreterToolResultContent"/> for the specified <paramref name="cicri"/>.</summary>

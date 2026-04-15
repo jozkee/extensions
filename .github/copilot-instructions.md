@@ -181,3 +181,5 @@ find test/Libraries -name "*[LibraryName]*" -name "*.csproj"
 4. Check corresponding tests: `cd test/Libraries/Microsoft.Extensions.[Area].Tests`
 5. Review library README: `cat src/Libraries/Microsoft.Extensions.[Area]/README.md`
 6. Build and test: `./build.sh --build --test` (with appropriate timeouts)
+
+To speedup build and test use `--no-dependencies -f net10.0` for build and `--no-build` for test. Skip integration and template tests if needed.

@@ -933,12 +933,60 @@ public class OpenAIResponseClientIntegrationTests : ChatClientIntegrationTests
     {
         SkipIfNotEnabled();
 
+        if (TestRunnerConfiguration.Instance["OpenAI:ChatModel"]?.StartsWith("gpt-5.4", StringComparison.OrdinalIgnoreCase) is not true)
+        {
+            throw new SkipTestException("Tool search requires gpt-5.4 or later.");
+        }
+
         using var chatClient = new FunctionInvokingChatClient(ChatClient);
 
         var schema = JsonDocument.Parse("""{"type":"object","required":["query"],"properties":{"query":{"type":"string"}},"additionalProperties":false}""").RootElement;
 
         bool searchInvoked = false;
         var searchFunction = new ToolSearchFunction(
+            "Search for available tools that can help with a given topic. Call this to discover what functions are available.",
+            schema,
+            (args) =>
+            {
+                searchInvoked = true;
+                return new AITool[]
+                {
+                    AIFunctionFactory.Create(() => 42, "GetSecretNumber", "Returns the current secret number"),
+                };
+            });
+
+        var response = streaming
+            ? await chatClient.GetStreamingResponseAsync("What is the current secret number? Use the tool_search function first to find relevant tools.", new()
+            {
+                Tools = [searchFunction]
+            }).ToChatResponseAsync()
+            : await chatClient.GetResponseAsync("What is the current secret number? Use the tool_search function first to find relevant tools.", new()
+            {
+                Tools = [searchFunction]
+            });
+
+        Assert.True(searchInvoked, "ToolSearchFunction should have been invoked by the model");
+        Assert.NotEmpty(response.Text);
+    }
+
+    [ConditionalTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FunctionInvocation_WithToolSearchFunction_Factory(bool streaming)
+    {
+        SkipIfNotEnabled();
+
+        if (TestRunnerConfiguration.Instance["OpenAI:ChatModel"]?.StartsWith("gpt-5.4", StringComparison.OrdinalIgnoreCase) is not true)
+        {
+            throw new SkipTestException("Tool search requires gpt-5.4 or later.");
+        }
+
+        using var chatClient = new FunctionInvokingChatClient(ChatClient);
+
+        var schema = JsonDocument.Parse("""{"type":"object","required":["query"],"properties":{"query":{"type":"string"}},"additionalProperties":false}""").RootElement;
+
+        bool searchInvoked = false;
+        var searchFunction = AIFunctionFactory.CreateToolSearch(
             "Search for available tools that can help with a given topic. Call this to discover what functions are available.",
             schema,
             (args) =>

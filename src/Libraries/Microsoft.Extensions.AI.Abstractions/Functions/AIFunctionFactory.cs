@@ -7,7 +7,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 #if !NET
 using System.Linq;
@@ -21,7 +20,6 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Shared.Collections;
-using Microsoft.Shared.DiagnosticIds;
 using Microsoft.Shared.Diagnostics;
 
 #pragma warning disable S3011 // Reflection should not be used to increase accessibility of classes, methods, or fields
@@ -525,7 +523,6 @@ public static partial class AIFunctionFactory
     /// <returns>The created <see cref="ToolSearchFunction"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="description"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="searchFunc"/> is <see langword="null"/>.</exception>
-    [Experimental(DiagnosticIds.Experiments.AIToolSearch, UrlFormat = DiagnosticIds.UrlFormat)]
     public static ToolSearchFunction CreateToolSearch(
         string description,
         JsonElement parametersSchema,
@@ -541,7 +538,6 @@ public static partial class AIFunctionFactory
     /// <returns>The created <see cref="ToolSearchFunction"/>.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="description"/> is <see langword="null"/>.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="searchFunc"/> is <see langword="null"/>.</exception>
-    [Experimental(DiagnosticIds.Experiments.AIToolSearch, UrlFormat = DiagnosticIds.UrlFormat)]
     public static ToolSearchFunction CreateToolSearch(
         string description,
         JsonElement parametersSchema,

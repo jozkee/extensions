@@ -1,4 +1,4 @@
-﻿{
+{
   "Name": "Microsoft.Extensions.AI.Abstractions, Version=10.5.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35",
   "Types": [
     {
@@ -326,6 +326,14 @@
         {
           "Member": "static Microsoft.Extensions.AI.AIFunctionDeclaration Microsoft.Extensions.AI.AIFunctionFactory.CreateDeclaration(string name, string? description, System.Text.Json.JsonElement jsonSchema, System.Text.Json.JsonElement? returnJsonSchema = null);",
           "Stage": "Stable"
+        },
+        {
+          "Member": "static Microsoft.Extensions.AI.ToolSearchFunction Microsoft.Extensions.AI.AIFunctionFactory.CreateToolSearch(string description, System.Text.Json.JsonElement parametersSchema, System.Func<Microsoft.Extensions.AI.AIFunctionArguments, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Collections.Generic.IList<Microsoft.Extensions.AI.AITool>>> searchFunc, string? name = null);",
+          "Stage": "Experimental"
+        },
+        {
+          "Member": "static Microsoft.Extensions.AI.ToolSearchFunction Microsoft.Extensions.AI.AIFunctionFactory.CreateToolSearch(string description, System.Text.Json.JsonElement parametersSchema, System.Func<Microsoft.Extensions.AI.AIFunctionArguments, System.Collections.Generic.IList<Microsoft.Extensions.AI.AITool>> searchFunc, string? name = null);",
+          "Stage": "Experimental"
         }
       ]
     },
@@ -1689,45 +1697,45 @@
     },
     {
       "Type": "class Microsoft.Extensions.AI.DelegatingAIFunctionDeclaration : Microsoft.Extensions.AI.AIFunctionDeclaration",
-      "Stage": "Stable",
+      "Stage": "Experimental",
       "Methods": [
         {
           "Member": "Microsoft.Extensions.AI.DelegatingAIFunctionDeclaration.DelegatingAIFunctionDeclaration(Microsoft.Extensions.AI.AIFunctionDeclaration innerFunction);",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         },
         {
           "Member": "override object? Microsoft.Extensions.AI.DelegatingAIFunctionDeclaration.GetService(System.Type serviceType, object? serviceKey = null);",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         },
         {
           "Member": "override string Microsoft.Extensions.AI.DelegatingAIFunctionDeclaration.ToString();",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         }
       ],
       "Properties": [
         {
           "Member": "override System.Collections.Generic.IReadOnlyDictionary<string, object?> Microsoft.Extensions.AI.DelegatingAIFunctionDeclaration.AdditionalProperties { get; }",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         },
         {
           "Member": "override string Microsoft.Extensions.AI.DelegatingAIFunctionDeclaration.Description { get; }",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         },
         {
           "Member": "Microsoft.Extensions.AI.AIFunctionDeclaration Microsoft.Extensions.AI.DelegatingAIFunctionDeclaration.InnerFunction { get; }",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         },
         {
           "Member": "override System.Text.Json.JsonElement Microsoft.Extensions.AI.DelegatingAIFunctionDeclaration.JsonSchema { get; }",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         },
         {
           "Member": "override string Microsoft.Extensions.AI.DelegatingAIFunctionDeclaration.Name { get; }",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         },
         {
           "Member": "override System.Text.Json.JsonElement? Microsoft.Extensions.AI.DelegatingAIFunctionDeclaration.ReturnJsonSchema { get; }",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         }
       ]
     },
@@ -2626,6 +2634,10 @@
           "Stage": "Stable"
         },
         {
+          "Member": "bool Microsoft.Extensions.AI.HostedMcpServerTool.DeferLoadingTools { get; set; }",
+          "Stage": "Experimental"
+        },
+        {
           "Member": "System.Collections.Generic.IDictionary<string, string>? Microsoft.Extensions.AI.HostedMcpServerTool.Headers { get; set; }",
           "Stage": "Stable"
         },
@@ -2733,25 +2745,25 @@
     },
     {
       "Type": "class Microsoft.Extensions.AI.HostedToolSearchTool : Microsoft.Extensions.AI.AITool",
-      "Stage": "Stable",
+      "Stage": "Experimental",
       "Methods": [
         {
           "Member": "Microsoft.Extensions.AI.HostedToolSearchTool.HostedToolSearchTool();",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         },
         {
           "Member": "Microsoft.Extensions.AI.HostedToolSearchTool.HostedToolSearchTool(System.Collections.Generic.IReadOnlyDictionary<string, object?>? additionalProperties);",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         }
       ],
       "Properties": [
         {
           "Member": "override System.Collections.Generic.IReadOnlyDictionary<string, object?> Microsoft.Extensions.AI.HostedToolSearchTool.AdditionalProperties { get; }",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         },
         {
           "Member": "override string Microsoft.Extensions.AI.HostedToolSearchTool.Name { get; }",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         }
       ]
     },
@@ -3968,21 +3980,21 @@
     },
     {
       "Type": "sealed class Microsoft.Extensions.AI.SearchableAIFunctionDeclaration : Microsoft.Extensions.AI.DelegatingAIFunctionDeclaration",
-      "Stage": "Stable",
+      "Stage": "Experimental",
       "Methods": [
         {
           "Member": "Microsoft.Extensions.AI.SearchableAIFunctionDeclaration.SearchableAIFunctionDeclaration(Microsoft.Extensions.AI.AIFunctionDeclaration innerFunction, string? namespaceName = null);",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         },
         {
           "Member": "static System.Collections.Generic.IList<Microsoft.Extensions.AI.AITool> Microsoft.Extensions.AI.SearchableAIFunctionDeclaration.CreateToolSet(System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.AIFunctionDeclaration> functions, string? namespaceName = null, System.Collections.Generic.IReadOnlyDictionary<string, object?>? toolSearchProperties = null);",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         }
       ],
       "Properties": [
         {
           "Member": "string? Microsoft.Extensions.AI.SearchableAIFunctionDeclaration.Namespace { get; }",
-          "Stage": "Stable"
+          "Stage": "Experimental"
         }
       ]
     },
@@ -4715,6 +4727,64 @@
         {
           "Member": "string Microsoft.Extensions.AI.ToolResultContent.CallId { get; }",
           "Stage": "Stable"
+        }
+      ]
+    },
+    {
+      "Type": "class Microsoft.Extensions.AI.ToolSearchCallContent : Microsoft.Extensions.AI.FunctionCallContent",
+      "Stage": "Experimental",
+      "Methods": [
+        {
+          "Member": "Microsoft.Extensions.AI.ToolSearchCallContent.ToolSearchCallContent(string callId, string name, System.Collections.Generic.IDictionary<string, object?>? arguments = null);",
+          "Stage": "Experimental"
+        }
+      ]
+    },
+    {
+      "Type": "class Microsoft.Extensions.AI.ToolSearchFunction : Microsoft.Extensions.AI.AIFunction",
+      "Stage": "Experimental",
+      "Methods": [
+        {
+          "Member": "Microsoft.Extensions.AI.ToolSearchFunction.ToolSearchFunction(string description, System.Text.Json.JsonElement parametersSchema, System.Func<Microsoft.Extensions.AI.AIFunctionArguments, System.Threading.CancellationToken, System.Threading.Tasks.ValueTask<System.Collections.Generic.IList<Microsoft.Extensions.AI.AITool>>> searchFunc, string? name = null);",
+          "Stage": "Experimental"
+        },
+        {
+          "Member": "Microsoft.Extensions.AI.ToolSearchFunction.ToolSearchFunction(string description, System.Text.Json.JsonElement parametersSchema, System.Func<Microsoft.Extensions.AI.AIFunctionArguments, System.Collections.Generic.IList<Microsoft.Extensions.AI.AITool>> searchFunc, string? name = null);",
+          "Stage": "Experimental"
+        },
+        {
+          "Member": "override System.Threading.Tasks.ValueTask<object?> Microsoft.Extensions.AI.ToolSearchFunction.InvokeCoreAsync(Microsoft.Extensions.AI.AIFunctionArguments arguments, System.Threading.CancellationToken cancellationToken);",
+          "Stage": "Experimental"
+        }
+      ],
+      "Properties": [
+        {
+          "Member": "override string Microsoft.Extensions.AI.ToolSearchFunction.Description { get; }",
+          "Stage": "Experimental"
+        },
+        {
+          "Member": "override System.Text.Json.JsonElement Microsoft.Extensions.AI.ToolSearchFunction.JsonSchema { get; }",
+          "Stage": "Experimental"
+        },
+        {
+          "Member": "override string Microsoft.Extensions.AI.ToolSearchFunction.Name { get; }",
+          "Stage": "Experimental"
+        }
+      ]
+    },
+    {
+      "Type": "class Microsoft.Extensions.AI.ToolSearchResultContent : Microsoft.Extensions.AI.FunctionResultContent",
+      "Stage": "Experimental",
+      "Methods": [
+        {
+          "Member": "Microsoft.Extensions.AI.ToolSearchResultContent.ToolSearchResultContent(string callId);",
+          "Stage": "Experimental"
+        }
+      ],
+      "Properties": [
+        {
+          "Member": "System.Collections.Generic.IList<Microsoft.Extensions.AI.AITool>? Microsoft.Extensions.AI.ToolSearchResultContent.Tools { get; set; }",
+          "Stage": "Experimental"
         }
       ]
     },

@@ -2,8 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using Microsoft.Shared.DiagnosticIds;
 
 namespace Microsoft.Extensions.AI;
 
@@ -21,7 +19,6 @@ namespace Microsoft.Extensions.AI;
 /// The result of a tool search call is represented by <see cref="ToolSearchResultContent"/>.
 /// </para>
 /// </remarks>
-[Experimental(DiagnosticIds.Experiments.AIToolSearch, UrlFormat = DiagnosticIds.UrlFormat)]
 public class ToolSearchCallContent : FunctionCallContent
 {
     /// <summary>

@@ -3,11 +3,9 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.Shared.DiagnosticIds;
 using Microsoft.Shared.Diagnostics;
 
 namespace Microsoft.Extensions.AI;
@@ -28,7 +26,6 @@ namespace Microsoft.Extensions.AI;
 /// are sent as <c>tool_result</c> with <c>tool_reference</c> blocks.
 /// </para>
 /// </remarks>
-[Experimental(DiagnosticIds.Experiments.AIToolSearch, UrlFormat = DiagnosticIds.UrlFormat)]
 public class ToolSearchFunction : AIFunction
 {
     /// <summary>The name of the tool search function.</summary>

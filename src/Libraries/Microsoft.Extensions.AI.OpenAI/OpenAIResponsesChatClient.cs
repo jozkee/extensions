@@ -709,6 +709,11 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
             case ResponseToolAITool rtat:
                 return rtat.Tool;
 
+            case SearchableAITool searchable:
+                var inner = ToResponseTool(searchable.InnerTool, options, toolSearchLookup);
+                inner?.Patch.Set("$.defer_loading"u8, "true"u8);
+                return inner;
+
             case AIFunctionDeclaration aiFunction:
                 var functionTool = ToResponseTool(aiFunction, options);
                 if ((toolSearchLookup ??= ToolSearchLookup.Create(options?.Tools)).IsDeferred(aiFunction.Name))
@@ -978,14 +983,21 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
             {
                 if (ToResponseTool(tool, options, toolSearchLookup) is { } responseTool)
                 {
-                    // When a namespaced HostedToolSearchTool claims this deferred tool,
-                    // collect it for later wrapping in a namespace container.
-                    string? responseToolName = responseTool is FunctionTool ft ? ft.FunctionName
-                        : responseTool is McpTool mcp ? mcp.ServerLabel
-                        : null;
+                    // SearchableAITool.Namespace takes priority over HostedToolSearchTool-driven namespacing.
+                    string? ns = (tool as SearchableAITool)?.Namespace;
+                    if (ns is null)
+                    {
+                        string? responseToolName = responseTool is FunctionTool ft ? ft.FunctionName
+                            : responseTool is McpTool mcp ? mcp.ServerLabel
+                            : null;
 
-                    if (responseToolName is not null
-                        && toolSearchLookup.GetNamespace(responseToolName) is { } ns)
+                        if (responseToolName is not null)
+                        {
+                            ns = toolSearchLookup.GetNamespace(responseToolName);
+                        }
+                    }
+
+                    if (ns is not null)
                     {
                         namespaceGroups ??= new(StringComparer.Ordinal);
                         if (!namespaceGroups.TryGetValue(ns, out var group))

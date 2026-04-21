@@ -756,6 +756,52 @@ public class OpenAIConversionTests
     }
 
     [Fact]
+    public void AsOpenAIResponseTool_SearchableAITool_FunctionDefersAndUnwraps()
+    {
+        var searchable = new SearchableAITool(_testFunction);
+
+        var result = searchable.AsOpenAIResponseTool();
+        Assert.NotNull(result);
+        Assert.IsType<FunctionTool>(result);
+        var json = ModelReaderWriter.Write(result, ModelReaderWriterOptions.Json).ToString();
+        Assert.Contains("defer_loading", json);
+        Assert.Contains("test_function", json);
+    }
+
+    [Fact]
+    public void AsOpenAIResponseTool_SearchableAITool_DefersEvenWhenNotInDeferredToolsList()
+    {
+        var mcpTool = new HostedMcpServerTool("my-mcp-server", "http://localhost:8000");
+        var searchable = new SearchableAITool(mcpTool);
+        var options = new ChatOptions
+        {
+            // The list excludes my-mcp-server, but the marker takes priority.
+            Tools = [new HostedToolSearchTool { DeferredTools = ["other-tool"] }, searchable]
+        };
+
+        var result = searchable.AsOpenAIResponseTool(options);
+        Assert.NotNull(result);
+        var json = ModelReaderWriter.Write(result, ModelReaderWriterOptions.Json).ToString();
+        Assert.Contains("defer_loading", json);
+    }
+
+    [Fact]
+    public void SearchableAITool_DelegatesAITool_Members()
+    {
+        var inner = _testFunction;
+        var searchable = new SearchableAITool(inner) { Namespace = "ns1" };
+
+        Assert.Same(inner, searchable.InnerTool);
+        Assert.Equal(inner.Name, searchable.Name);
+        Assert.Equal(inner.Description, searchable.Description);
+        Assert.Equal("ns1", searchable.Namespace);
+
+        // GetService delegates: should find the inner AIFunctionDeclaration.
+        Assert.Same(inner, searchable.GetService<AIFunctionDeclaration>());
+        Assert.Same(searchable, searchable.GetService<SearchableAITool>());
+    }
+
+    [Fact]
     public void AsOpenAIResponseTool_WithNullTool_ThrowsArgumentNullException()
     {
         Assert.Throws<ArgumentNullException>("tool", () => ((AITool)null!).AsOpenAIResponseTool());

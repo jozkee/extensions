@@ -285,9 +285,9 @@ public sealed class OpenAIHostedFileClientIntegrationTests : IDisposable
         {
             foreach (var content in msg.Contents)
             {
-                if (content is CodeInterpreterToolResultContent { RawRepresentation: OpenAI.Responses.CodeInterpreterCallResponseItem cicri })
+                if (content is CodeInterpreterToolResultContent { ContainerId: { } resultContainerId })
                 {
-                    containerId = cicri.ContainerId;
+                    containerId = resultContainerId;
                 }
             }
         }
@@ -355,9 +355,9 @@ public sealed class OpenAIHostedFileClientIntegrationTests : IDisposable
         {
             foreach (var content in msg.Contents)
             {
-                if (content is CodeInterpreterToolResultContent { RawRepresentation: OpenAI.Responses.CodeInterpreterCallResponseItem cicri })
+                if (content is CodeInterpreterToolResultContent { ContainerId: { } resultContainerId })
                 {
-                    containerId = cicri.ContainerId;
+                    containerId = resultContainerId;
                 }
             }
         }
@@ -403,9 +403,9 @@ public sealed class OpenAIHostedFileClientIntegrationTests : IDisposable
         {
             foreach (var content in msg.Contents)
             {
-                if (content is CodeInterpreterToolResultContent { RawRepresentation: OpenAI.Responses.CodeInterpreterCallResponseItem cicri })
+                if (content is CodeInterpreterToolResultContent { ContainerId: { } resultContainerId })
                 {
-                    containerId = cicri.ContainerId;
+                    containerId = resultContainerId;
                 }
             }
         }

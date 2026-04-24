@@ -1,9 +1,11 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Shared.DiagnosticIds;
+using Microsoft.Shared.Diagnostics;
 
 namespace Microsoft.Extensions.AI;
 
@@ -20,6 +22,18 @@ public sealed class CodeInterpreterToolResultContent : ToolResultContent
     public CodeInterpreterToolResultContent(string callId)
         : base(callId)
     {
+    }
+
+    /// <summary>Gets or sets the ID of the hosted container used for the tool call.</summary>
+    /// <remarks>
+    /// The container ID can be supplied to <see cref="HostedCodeInterpreterTool.ContainerId"/> on a subsequent request
+    /// to reuse files and other state retained by the hosted code execution environment.
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="value"/> is empty or composed entirely of whitespace.</exception>
+    public string? ContainerId
+    {
+        get;
+        set => field = value is not null ? Throw.IfNullOrWhitespace(value) : value;
     }
 
     /// <summary>

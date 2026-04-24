@@ -3305,6 +3305,7 @@ public class OpenAIResponseClientTests
         Assert.Equal(3, message.Contents.Count);
 
         var codeCall = Assert.IsType<CodeInterpreterToolCallContent>(message.Contents[0]);
+        Assert.Equal("cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4", codeCall.ContainerId);
         Assert.NotNull(codeCall.Inputs);
         var codeInput = Assert.IsType<DataContent>(Assert.Single(codeCall.Inputs));
         Assert.Equal("text/x-python", codeInput.MediaType);
@@ -3312,9 +3313,131 @@ public class OpenAIResponseClientTests
 
         var codeResult = Assert.IsType<CodeInterpreterToolResultContent>(message.Contents[1]);
         Assert.Equal(codeCall.CallId, codeResult.CallId);
+        Assert.Equal("cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4", codeResult.ContainerId);
 
         var textContent = Assert.IsType<TextContent>(message.Contents[2]);
         Assert.Equal("15", textContent.Text);
+    }
+
+    [Fact]
+    public async Task CodeInterpreterTool_ExplicitContainer_NonStreaming()
+    {
+        const string Input = """
+            {
+                "model":"gpt-4o-2024-08-06",
+                "input":[{
+                    "type":"message",
+                    "role":"user",
+                    "content":[{"type":"input_text","text":"Use the existing data file"}]
+                }],
+                "tools":[{
+                    "type":"code_interpreter",
+                    "container":"cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4"
+                }]
+            }
+            """;
+
+        const string Output = """
+            {
+              "id": "resp_0e599e83cc6642210068fb7475165481a08efc750483c7048f",
+              "object": "response",
+              "created_at": 1761309813,
+              "status": "completed",
+              "background": false,
+              "error": null,
+              "incomplete_details": null,
+              "instructions": null,
+              "max_output_tokens": null,
+              "max_tool_calls": null,
+              "model": "gpt-4o-2024-08-06",
+              "output": [
+                {
+                  "id": "ci_0e599e83cc6642210068fb7477fb9881a0811e8b0dc054b2fa",
+                  "type": "code_interpreter_call",
+                  "status": "completed",
+                  "code": "print('done')",
+                  "container_id": "cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4",
+                  "outputs": null
+                },
+                {
+                  "id": "msg_0e599e83cc6642210068fb747e118081a08c3ed46daa9d9dcb",
+                  "type": "message",
+                  "status": "completed",
+                  "content": [
+                    {
+                      "type": "output_text",
+                      "annotations": [],
+                      "logprobs": [],
+                      "text": "done"
+                    }
+                  ],
+                  "role": "assistant"
+                }
+              ],
+              "parallel_tool_calls": true,
+              "previous_response_id": null,
+              "prompt_cache_key": null,
+              "reasoning": {
+                "effort": null,
+                "summary": null
+              },
+              "safety_identifier": null,
+              "service_tier": "default",
+              "store": true,
+              "temperature": 1.0,
+              "text": {
+                "format": {
+                  "type": "text"
+                },
+                "verbosity": "medium"
+              },
+              "tool_choice": "auto",
+              "tools": [
+                {
+                  "type": "code_interpreter",
+                  "container": "cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4"
+                }
+              ],
+              "top_logprobs": 0,
+              "top_p": 1.0,
+              "truncation": "disabled",
+              "usage": {
+                "input_tokens": 225,
+                "input_tokens_details": {
+                  "cached_tokens": 0
+                },
+                "output_tokens": 34,
+                "output_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "total_tokens": 259
+              },
+              "user": null,
+              "metadata": {}
+            }
+            """;
+
+        using VerbatimHttpHandler handler = new(Input, Output);
+        using HttpClient httpClient = new(handler);
+        using IChatClient client = CreateResponseClient(httpClient, "gpt-4o-2024-08-06");
+
+        var response = await client.GetResponseAsync("Use the existing data file", new()
+        {
+            Tools =
+            [
+                new HostedCodeInterpreterTool
+                {
+                    ContainerId = "cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4",
+                }
+            ],
+        });
+
+        var message = Assert.Single(response.Messages);
+        var codeCall = Assert.IsType<CodeInterpreterToolCallContent>(message.Contents[0]);
+        Assert.Equal("cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4", codeCall.ContainerId);
+
+        var codeResult = Assert.IsType<CodeInterpreterToolResultContent>(message.Contents[1]);
+        Assert.Equal("cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4", codeResult.ContainerId);
     }
 
     [Fact]
@@ -3608,16 +3731,17 @@ public class OpenAIResponseClientTests
             updates.Add(update);
         }
 
-        // Verify we got streaming updates with code interpreter call content (from deltas)
+        // Verify we got streaming updates with code interpreter call content (from item metadata and deltas)
         var codeInterpreterCallUpdates = updates.Where(u =>
             u.Contents != null && u.Contents.Any(c => c is CodeInterpreterToolCallContent)).ToList();
 
-        // Should have exactly 3 delta updates (one for each delta event)
-        Assert.Equal(3, codeInterpreterCallUpdates.Count);
+        Assert.Equal(4, codeInterpreterCallUpdates.Count);
+        Assert.Equal("cntr_68fc3b80043c8191990a5837d7617af704511ed77cec9447",
+            codeInterpreterCallUpdates[0].Contents.OfType<CodeInterpreterToolCallContent>().Single().ContainerId);
 
         // Verify the deltas have the expected call ID and concatenate the code
         StringBuilder codeBuilder = new();
-        foreach (var update in codeInterpreterCallUpdates)
+        foreach (var update in codeInterpreterCallUpdates.Skip(1))
         {
             var content = update.Contents.OfType<CodeInterpreterToolCallContent>().First();
             Assert.Equal("ci_05d8f42f04f94cb80068fc3b80fba8819ea3bfbdd36e94bcf3", content.CallId);
@@ -3651,6 +3775,7 @@ public class OpenAIResponseClientTests
         // First content should be the coalesced CodeInterpreterToolCallContent
         var codeCall = Assert.IsType<CodeInterpreterToolCallContent>(message.Contents[0]);
         Assert.Equal("ci_05d8f42f04f94cb80068fc3b80fba8819ea3bfbdd36e94bcf3", codeCall.CallId);
+        Assert.Equal("cntr_68fc3b80043c8191990a5837d7617af704511ed77cec9447", codeCall.ContainerId);
         Assert.NotNull(codeCall.Inputs);
         var codeInput = Assert.IsType<DataContent>(Assert.Single(codeCall.Inputs));
         Assert.Equal("text/x-python", codeInput.MediaType);
@@ -3659,6 +3784,7 @@ public class OpenAIResponseClientTests
         // Second content should be the CodeInterpreterToolResultContent
         var codeResult = Assert.IsType<CodeInterpreterToolResultContent>(message.Contents[1]);
         Assert.Equal("ci_05d8f42f04f94cb80068fc3b80fba8819ea3bfbdd36e94bcf3", codeResult.CallId);
+        Assert.Equal("cntr_68fc3b80043c8191990a5837d7617af704511ed77cec9447", codeResult.ContainerId);
     }
 
     [Fact]

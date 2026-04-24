@@ -1,6 +1,7 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System;
 using System.Collections.Generic;
 using Xunit;
 
@@ -15,6 +16,7 @@ public class HostedCodeInterpreterToolTests
         Assert.Equal("code_interpreter", tool.Name);
         Assert.Empty(tool.Description);
         Assert.Empty(tool.AdditionalProperties);
+        Assert.Null(tool.ContainerId);
         Assert.Null(tool.Inputs);
         Assert.Equal(tool.Name, tool.ToString());
     }
@@ -42,6 +44,7 @@ public class HostedCodeInterpreterToolTests
     {
         var tool = new HostedCodeInterpreterTool
         {
+            ContainerId = "container-123",
             Inputs =
             [
                 new HostedFileContent("id123"),
@@ -49,9 +52,20 @@ public class HostedCodeInterpreterToolTests
             ]
         };
 
+        Assert.Equal("container-123", tool.ContainerId);
         Assert.NotNull(tool.Inputs);
         Assert.Equal(2, tool.Inputs.Count);
         Assert.IsType<HostedFileContent>(tool.Inputs[0]);
         Assert.IsType<DataContent>(tool.Inputs[1]);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void ContainerId_Invalid_Throws(string containerId)
+    {
+        var tool = new HostedCodeInterpreterTool();
+
+        Assert.Throws<ArgumentException>("value", () => tool.ContainerId = containerId);
     }
 }

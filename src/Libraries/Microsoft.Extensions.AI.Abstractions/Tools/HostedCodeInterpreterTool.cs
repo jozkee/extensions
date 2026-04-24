@@ -1,7 +1,11 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+using Microsoft.Shared.DiagnosticIds;
+using Microsoft.Shared.Diagnostics;
 
 namespace Microsoft.Extensions.AI;
 
@@ -32,6 +36,19 @@ public class HostedCodeInterpreterTool : AITool
 
     /// <inheritdoc />
     public override IReadOnlyDictionary<string, object?> AdditionalProperties => _additionalProperties ?? base.AdditionalProperties;
+
+    /// <summary>Gets or sets the ID of an existing hosted container to use for code interpreter tool calls.</summary>
+    /// <remarks>
+    /// When <see langword="null"/>, the service may create a new container or use its default container-selection behavior.
+    /// When non-<see langword="null"/>, the service should use the referenced container if it is still available.
+    /// </remarks>
+    /// <exception cref="ArgumentException"><paramref name="value"/> is empty or composed entirely of whitespace.</exception>
+    [Experimental(DiagnosticIds.Experiments.AICodeInterpreter, UrlFormat = DiagnosticIds.UrlFormat)]
+    public string? ContainerId
+    {
+        get;
+        set => field = value is not null ? Throw.IfNullOrWhitespace(value) : value;
+    }
 
     /// <summary>Gets or sets a collection of <see cref="AIContent"/> to be used as input to the code interpreter tool.</summary>
     /// <remarks>

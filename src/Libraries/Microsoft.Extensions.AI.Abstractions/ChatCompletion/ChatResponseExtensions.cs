@@ -364,10 +364,13 @@ public static class ChatResponseExtensions
                 }
 
                 List<AIContent>? inputs = null;
+                string? containerId = null;
 
                 for (int i = start; i < end; i++)
                 {
-                    (inputs ??= []).AddRange(((CodeInterpreterToolCallContent)contents[i]).Inputs ?? []);
+                    var content = (CodeInterpreterToolCallContent)contents[i];
+                    containerId ??= content.ContainerId;
+                    (inputs ??= []).AddRange(content.Inputs ?? []);
                 }
 
                 if (inputs is not null)
@@ -377,6 +380,7 @@ public static class ChatResponseExtensions
 
                 return new(firstContent.CallId)
                 {
+                    ContainerId = containerId,
                     Inputs = inputs,
                     AdditionalProperties = firstContent.AdditionalProperties?.Clone(),
                 };
@@ -401,10 +405,13 @@ public static class ChatResponseExtensions
                 }
 
                 List<AIContent>? output = null;
+                string? containerId = null;
 
                 for (int i = start; i < end; i++)
                 {
-                    (output ??= []).AddRange(((CodeInterpreterToolResultContent)contents[i]).Outputs ?? []);
+                    var content = (CodeInterpreterToolResultContent)contents[i];
+                    containerId ??= content.ContainerId;
+                    (output ??= []).AddRange(content.Outputs ?? []);
                 }
 
                 if (output is not null)
@@ -414,6 +421,7 @@ public static class ChatResponseExtensions
 
                 return new(firstContent.CallId)
                 {
+                    ContainerId = containerId,
                     Outputs = output,
                     AdditionalProperties = firstContent.AdditionalProperties?.Clone(),
                 };

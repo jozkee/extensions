@@ -306,6 +306,21 @@ public class OpenAIConversionTests
     }
 
     [Fact]
+    public void AsOpenAIResponseTool_WithHostedCodeInterpreterToolWithContainerId_ProducesValidCodeInterpreterTool()
+    {
+        var codeTool = new HostedCodeInterpreterTool
+        {
+            ContainerId = "cntr_123",
+        };
+
+        var result = codeTool.AsOpenAIResponseTool();
+
+        Assert.NotNull(result);
+        var json = ModelReaderWriter.Write(result, ModelReaderWriterOptions.Json).ToString();
+        Assert.Contains("\"container\":\"cntr_123\"", json);
+    }
+
+    [Fact]
     public void AsOpenAIResponseTool_WithHostedImageGenerationTool_ProducesValidImageGenerationTool()
     {
         var imageGenTool = new HostedImageGenerationTool

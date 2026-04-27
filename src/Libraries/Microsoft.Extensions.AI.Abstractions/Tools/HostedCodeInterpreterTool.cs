@@ -31,6 +31,15 @@ public class HostedCodeInterpreterTool : AITool
         _additionalProperties = additionalProperties;
     }
 
+    /// <summary>Creates a shallow clone of the current <see cref="HostedCodeInterpreterTool"/> instance.</summary>
+    /// <returns>A shallow clone of the current <see cref="HostedCodeInterpreterTool"/> instance.</returns>
+    /// <remarks>
+    /// The clone will have the same values for all properties as the original instance. Any collections, like
+    /// <see cref="Inputs"/> and <see cref="AdditionalProperties"/>, are shared with the original.
+    /// </remarks>
+    [Experimental(DiagnosticIds.Experiments.AICodeInterpreter, UrlFormat = DiagnosticIds.UrlFormat)]
+    public virtual HostedCodeInterpreterTool Clone() => (HostedCodeInterpreterTool)MemberwiseClone();
+
     /// <inheritdoc />
     public override string Name => "code_interpreter";
 

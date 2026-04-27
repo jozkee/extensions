@@ -2272,6 +2272,10 @@
         {
           "Member": "Microsoft.Extensions.AI.HostedCodeInterpreterTool.HostedCodeInterpreterTool(System.Collections.Generic.IReadOnlyDictionary<string, object?>? additionalProperties);",
           "Stage": "Stable"
+        },
+        {
+          "Member": "virtual Microsoft.Extensions.AI.HostedCodeInterpreterTool Microsoft.Extensions.AI.HostedCodeInterpreterTool.Clone();",
+          "Stage": "Experimental"
         }
       ],
       "Properties": [

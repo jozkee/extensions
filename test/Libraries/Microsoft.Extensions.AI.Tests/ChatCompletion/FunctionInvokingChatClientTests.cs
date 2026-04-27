@@ -36,6 +36,7 @@ public class FunctionInvokingChatClientTests
 
         Assert.False(client.AllowConcurrentInvocation);
         Assert.False(client.IncludeDetailedErrors);
+        Assert.False(client.EnableCodeInterpreterContainerReuse);
         Assert.Equal(40, client.MaximumIterationsPerRequest);
         Assert.Equal(3, client.MaximumConsecutiveErrorsPerRequest);
         Assert.Null(client.FunctionInvoker);
@@ -55,6 +56,10 @@ public class FunctionInvokingChatClientTests
         Assert.False(client.IncludeDetailedErrors);
         client.IncludeDetailedErrors = true;
         Assert.True(client.IncludeDetailedErrors);
+
+        Assert.False(client.EnableCodeInterpreterContainerReuse);
+        client.EnableCodeInterpreterContainerReuse = true;
+        Assert.True(client.EnableCodeInterpreterContainerReuse);
 
         Assert.Equal(40, client.MaximumIterationsPerRequest);
         client.MaximumIterationsPerRequest = 5;
@@ -1439,6 +1444,147 @@ public class FunctionInvokingChatClientTests
         Assert.Equal("done!", (await service.GetResponseAsync("hey", options)).ToString());
         iteration = 0;
         Assert.Equal("done!", (await service.GetStreamingResponseAsync("hey", options).ToChatResponseAsync()).ToString());
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task EnableCodeInterpreterContainerReuse_ControlsContainerPropagation(bool enabled, bool streaming)
+    {
+        var hostedCodeInterpreterTool = new HostedCodeInterpreterTool
+        {
+            Inputs = [new HostedFileContent("file-123")],
+        };
+
+        var options = new ChatOptions
+        {
+            Tools =
+            [
+                hostedCodeInterpreterTool,
+                AIFunctionFactory.Create(() => "Result 1", "Func1"),
+            ],
+        };
+
+        int iteration = 0;
+
+        ChatResponse GetResponse(ChatOptions? actualOptions)
+        {
+            iteration++;
+
+            var codeInterpreterTool = Assert.Single(actualOptions!.Tools!.OfType<HostedCodeInterpreterTool>());
+            if (iteration == 1)
+            {
+                Assert.Null(codeInterpreterTool.ContainerId);
+                return new ChatResponse(new ChatMessage(ChatRole.Assistant,
+                [
+                    new CodeInterpreterToolCallContent("code-call-1") { ContainerId = "container-123" },
+                    new FunctionCallContent("callId1", "Func1"),
+                ]));
+            }
+
+            if (iteration == 2)
+            {
+                Assert.Equal(enabled ? "container-123" : null, codeInterpreterTool.ContainerId);
+                Assert.Equal("file-123", Assert.Single(codeInterpreterTool.Inputs!.OfType<HostedFileContent>()).FileId);
+                return new ChatResponse(new ChatMessage(ChatRole.Assistant, "done!"));
+            }
+
+            throw new InvalidOperationException("Unexpected iteration");
+        }
+
+        using var innerClient = new TestChatClient
+        {
+            GetResponseAsyncCallback = (chatContents, actualOptions, cancellationToken) =>
+                Task.FromResult(GetResponse(actualOptions)),
+            GetStreamingResponseAsyncCallback = (chatContents, actualOptions, cancellationToken) =>
+                YieldAsync(GetResponse(actualOptions).ToChatResponseUpdates()),
+        };
+
+        using var chatClient = new FunctionInvokingChatClient(innerClient)
+        {
+            EnableCodeInterpreterContainerReuse = enabled,
+        };
+
+        ChatResponse response = streaming
+            ? await chatClient.GetStreamingResponseAsync("hello", options).ToChatResponseAsync()
+            : await chatClient.GetResponseAsync("hello", options);
+
+        Assert.Equal("done!", response.Text);
+        Assert.Equal(2, iteration);
+        Assert.Null(hostedCodeInterpreterTool.ContainerId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EnableCodeInterpreterContainerReuse_PreservesDerivedToolInstances(bool streaming)
+    {
+        var hostedCodeInterpreterTool = new CustomHostedCodeInterpreterTool
+        {
+            CustomState = "state",
+        };
+
+        var options = new ChatOptions
+        {
+            Tools =
+            [
+                hostedCodeInterpreterTool,
+                AIFunctionFactory.Create(() => "Result 1", "Func1"),
+            ],
+        };
+
+        int iteration = 0;
+
+        ChatResponse GetResponse(ChatOptions? actualOptions)
+        {
+            iteration++;
+
+            var codeInterpreterTool = Assert.Single(actualOptions!.Tools!.OfType<HostedCodeInterpreterTool>());
+            if (iteration == 1)
+            {
+                Assert.Same(hostedCodeInterpreterTool, codeInterpreterTool);
+                Assert.Null(codeInterpreterTool.ContainerId);
+                return new ChatResponse(new ChatMessage(ChatRole.Assistant,
+                [
+                    new CodeInterpreterToolCallContent("code-call-1") { ContainerId = "container-123" },
+                    new FunctionCallContent("callId1", "Func1"),
+                ]));
+            }
+
+            if (iteration == 2)
+            {
+                var customTool = Assert.IsType<CustomHostedCodeInterpreterTool>(codeInterpreterTool);
+                Assert.NotSame(hostedCodeInterpreterTool, customTool);
+                Assert.Equal("container-123", customTool.ContainerId);
+                Assert.Equal("state", customTool.CustomState);
+                return new ChatResponse(new ChatMessage(ChatRole.Assistant, "done!"));
+            }
+
+            throw new InvalidOperationException("Unexpected iteration");
+        }
+
+        using var innerClient = new TestChatClient
+        {
+            GetResponseAsyncCallback = (chatContents, actualOptions, cancellationToken) =>
+                Task.FromResult(GetResponse(actualOptions)),
+            GetStreamingResponseAsyncCallback = (chatContents, actualOptions, cancellationToken) =>
+                YieldAsync(GetResponse(actualOptions).ToChatResponseUpdates()),
+        };
+
+        using var chatClient = new FunctionInvokingChatClient(innerClient)
+        {
+            EnableCodeInterpreterContainerReuse = true,
+        };
+
+        ChatResponse response = streaming
+            ? await chatClient.GetStreamingResponseAsync("hello", options).ToChatResponseAsync()
+            : await chatClient.GetResponseAsync("hello", options);
+
+        Assert.Equal("done!", response.Text);
+        Assert.Equal(2, iteration);
+        Assert.Null(hostedCodeInterpreterTool.ContainerId);
     }
 
     [Fact]
@@ -3638,6 +3784,11 @@ public class FunctionInvokingChatClientTests
         // There should be a FunctionResultContent from the local invocation
         Assert.Contains(response.Messages, m =>
             m.Contents.Any(c => c is FunctionResultContent frc2 && frc2.CallId == "callId1"));
+    }
+
+    private sealed class CustomHostedCodeInterpreterTool : HostedCodeInterpreterTool
+    {
+        public string? CustomState { get; set; }
     }
 }
 

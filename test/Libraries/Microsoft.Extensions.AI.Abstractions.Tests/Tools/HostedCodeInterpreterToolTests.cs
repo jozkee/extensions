@@ -59,6 +59,26 @@ public class HostedCodeInterpreterToolTests
         Assert.IsType<DataContent>(tool.Inputs[1]);
     }
 
+    [Fact]
+    public void Clone_ReturnsShallowCopy()
+    {
+        var props = new Dictionary<string, object?> { ["key"] = "value" };
+        List<AIContent> inputs = [new HostedFileContent("id123")];
+        var tool = new HostedCodeInterpreterTool(props)
+        {
+            ContainerId = "container-123",
+            Inputs = inputs,
+        };
+
+        var clone = tool.Clone();
+
+        Assert.NotSame(tool, clone);
+        Assert.IsType<HostedCodeInterpreterTool>(clone);
+        Assert.Equal("container-123", clone.ContainerId);
+        Assert.Same(inputs, clone.Inputs);
+        Assert.Same(props, clone.AdditionalProperties);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData(" ")]

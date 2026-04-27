@@ -580,6 +580,10 @@
           "Stage": "Stable"
         },
         {
+          "Member": "bool Microsoft.Extensions.AI.FunctionInvokingChatClient.EnableCodeInterpreterContainerReuse { get; set; }",
+          "Stage": "Experimental"
+        },
+        {
           "Member": "System.IServiceProvider? Microsoft.Extensions.AI.FunctionInvokingChatClient.FunctionInvocationServices { get; }",
           "Stage": "Stable"
         },

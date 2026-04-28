@@ -754,10 +754,11 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                 };
 
             case HostedCodeInterpreterTool codeTool:
+                IList<AIContent>? containerInputs = codeTool.Container is CreateNewContainerInfo { Inputs: { } inputs } ? inputs : codeTool.Inputs;
                 return new CodeInterpreterTool(
-                    codeTool.ContainerId is { } containerId ?
+                    codeTool.Container is ExistingContainerInfo { ContainerId: var containerId } ?
                         new(containerId) :
-                        new(codeTool.Inputs?.OfType<HostedFileContent>().Select(f => f.FileId).ToList() is { Count: > 0 } ids ?
+                        new(containerInputs?.OfType<HostedFileContent>().Select(f => f.FileId).ToList() is { Count: > 0 } ids ?
                             CodeInterpreterToolContainerConfiguration.CreateAutomaticContainerConfiguration(ids) :
                             new()));
 
@@ -1810,7 +1811,6 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
 
         return new(cicri.Id)
         {
-            ContainerId = cicri.ContainerId,
             Outputs = outputContents,
             RawRepresentation = cicri,
         };

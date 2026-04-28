@@ -293,7 +293,7 @@ public class OpenAIConversionTests
         var fileContent = new HostedFileContent("file-123");
         var codeTool = new HostedCodeInterpreterTool
         {
-            Inputs = [fileContent]
+            Container = ContainerInfo.CreateNew([fileContent])
         };
 
         var result = codeTool.AsOpenAIResponseTool();
@@ -310,7 +310,7 @@ public class OpenAIConversionTests
     {
         var codeTool = new HostedCodeInterpreterTool
         {
-            ContainerId = "cntr_123",
+            Container = ContainerInfo.FromExisting("cntr_123"),
         };
 
         var result = codeTool.AsOpenAIResponseTool();

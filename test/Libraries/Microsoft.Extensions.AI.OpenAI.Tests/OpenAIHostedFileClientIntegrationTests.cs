@@ -285,7 +285,7 @@ public sealed class OpenAIHostedFileClientIntegrationTests : IDisposable
         {
             foreach (var content in msg.Contents)
             {
-                if (content is CodeInterpreterToolResultContent { ContainerId: { } resultContainerId })
+                if (content is CodeInterpreterToolCallContent { ContainerId: { } resultContainerId })
                 {
                     containerId = resultContainerId;
                 }
@@ -355,7 +355,7 @@ public sealed class OpenAIHostedFileClientIntegrationTests : IDisposable
         {
             foreach (var content in msg.Contents)
             {
-                if (content is CodeInterpreterToolResultContent { ContainerId: { } resultContainerId })
+                if (content is CodeInterpreterToolCallContent { ContainerId: { } resultContainerId })
                 {
                     containerId = resultContainerId;
                 }
@@ -403,7 +403,7 @@ public sealed class OpenAIHostedFileClientIntegrationTests : IDisposable
         {
             foreach (var content in msg.Contents)
             {
-                if (content is CodeInterpreterToolResultContent { ContainerId: { } resultContainerId })
+                if (content is CodeInterpreterToolCallContent { ContainerId: { } resultContainerId })
                 {
                     containerId = resultContainerId;
                 }

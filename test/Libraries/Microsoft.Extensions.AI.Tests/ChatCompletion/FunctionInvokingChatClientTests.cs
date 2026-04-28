@@ -1455,7 +1455,7 @@ public class FunctionInvokingChatClientTests
     {
         var hostedCodeInterpreterTool = new HostedCodeInterpreterTool
         {
-            Inputs = [new HostedFileContent("file-123")],
+            Container = ContainerInfo.CreateNew([new HostedFileContent("file-123")]),
         };
 
         var options = new ChatOptions
@@ -1476,7 +1476,7 @@ public class FunctionInvokingChatClientTests
             var codeInterpreterTool = Assert.Single(actualOptions!.Tools!.OfType<HostedCodeInterpreterTool>());
             if (iteration == 1)
             {
-                Assert.Null(codeInterpreterTool.ContainerId);
+                Assert.IsType<CreateNewContainerInfo>(codeInterpreterTool.Container);
                 return new ChatResponse(new ChatMessage(ChatRole.Assistant,
                 [
                     new CodeInterpreterToolCallContent("code-call-1") { ContainerId = "container-123" },
@@ -1486,8 +1486,17 @@ public class FunctionInvokingChatClientTests
 
             if (iteration == 2)
             {
-                Assert.Equal(enabled ? "container-123" : null, codeInterpreterTool.ContainerId);
-                Assert.Equal("file-123", Assert.Single(codeInterpreterTool.Inputs!.OfType<HostedFileContent>()).FileId);
+                if (enabled)
+                {
+                    var existingContainer = Assert.IsType<ExistingContainerInfo>(codeInterpreterTool.Container);
+                    Assert.Equal("container-123", existingContainer.ContainerId);
+                }
+                else
+                {
+                    var createNewContainer = Assert.IsType<CreateNewContainerInfo>(codeInterpreterTool.Container);
+                    Assert.Equal("file-123", Assert.Single(createNewContainer.Inputs!.OfType<HostedFileContent>()).FileId);
+                }
+
                 return new ChatResponse(new ChatMessage(ChatRole.Assistant, "done!"));
             }
 
@@ -1513,7 +1522,7 @@ public class FunctionInvokingChatClientTests
 
         Assert.Equal("done!", response.Text);
         Assert.Equal(2, iteration);
-        Assert.Null(hostedCodeInterpreterTool.ContainerId);
+        Assert.IsType<CreateNewContainerInfo>(hostedCodeInterpreterTool.Container);
     }
 
     [Theory]
@@ -1545,7 +1554,7 @@ public class FunctionInvokingChatClientTests
             if (iteration == 1)
             {
                 Assert.Same(hostedCodeInterpreterTool, codeInterpreterTool);
-                Assert.Null(codeInterpreterTool.ContainerId);
+                Assert.Null(codeInterpreterTool.Container);
                 return new ChatResponse(new ChatMessage(ChatRole.Assistant,
                 [
                     new CodeInterpreterToolCallContent("code-call-1") { ContainerId = "container-123" },
@@ -1557,7 +1566,8 @@ public class FunctionInvokingChatClientTests
             {
                 var customTool = Assert.IsType<CustomHostedCodeInterpreterTool>(codeInterpreterTool);
                 Assert.NotSame(hostedCodeInterpreterTool, customTool);
-                Assert.Equal("container-123", customTool.ContainerId);
+                var existingContainer = Assert.IsType<ExistingContainerInfo>(customTool.Container);
+                Assert.Equal("container-123", existingContainer.ContainerId);
                 Assert.Equal("state", customTool.CustomState);
                 return new ChatResponse(new ChatMessage(ChatRole.Assistant, "done!"));
             }
@@ -1584,7 +1594,7 @@ public class FunctionInvokingChatClientTests
 
         Assert.Equal("done!", response.Text);
         Assert.Equal(2, iteration);
-        Assert.Null(hostedCodeInterpreterTool.ContainerId);
+        Assert.Null(hostedCodeInterpreterTool.Container);
     }
 
     [Fact]

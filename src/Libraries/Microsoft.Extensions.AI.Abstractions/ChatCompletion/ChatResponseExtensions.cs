@@ -405,12 +405,10 @@ public static class ChatResponseExtensions
                 }
 
                 List<AIContent>? output = null;
-                string? containerId = null;
 
                 for (int i = start; i < end; i++)
                 {
                     var content = (CodeInterpreterToolResultContent)contents[i];
-                    containerId ??= content.ContainerId;
                     (output ??= []).AddRange(content.Outputs ?? []);
                 }
 
@@ -421,7 +419,6 @@ public static class ChatResponseExtensions
 
                 return new(firstContent.CallId)
                 {
-                    ContainerId = containerId,
                     Outputs = output,
                     AdditionalProperties = firstContent.AdditionalProperties?.Clone(),
                 };

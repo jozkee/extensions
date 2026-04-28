@@ -3313,7 +3313,6 @@ public class OpenAIResponseClientTests
 
         var codeResult = Assert.IsType<CodeInterpreterToolResultContent>(message.Contents[1]);
         Assert.Equal(codeCall.CallId, codeResult.CallId);
-        Assert.Equal("cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4", codeResult.ContainerId);
 
         var textContent = Assert.IsType<TextContent>(message.Contents[2]);
         Assert.Equal("15", textContent.Text);
@@ -3427,7 +3426,7 @@ public class OpenAIResponseClientTests
             [
                 new HostedCodeInterpreterTool
                 {
-                    ContainerId = "cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4",
+                    Container = ContainerInfo.FromExisting("cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4"),
                 }
             ],
         });
@@ -3437,7 +3436,7 @@ public class OpenAIResponseClientTests
         Assert.Equal("cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4", codeCall.ContainerId);
 
         var codeResult = Assert.IsType<CodeInterpreterToolResultContent>(message.Contents[1]);
-        Assert.Equal("cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4", codeResult.ContainerId);
+        Assert.Equal(codeCall.CallId, codeResult.CallId);
     }
 
     [Fact]
@@ -3784,7 +3783,6 @@ public class OpenAIResponseClientTests
         // Second content should be the CodeInterpreterToolResultContent
         var codeResult = Assert.IsType<CodeInterpreterToolResultContent>(message.Contents[1]);
         Assert.Equal("ci_05d8f42f04f94cb80068fc3b80fba8819ea3bfbdd36e94bcf3", codeResult.CallId);
-        Assert.Equal("cntr_68fc3b80043c8191990a5837d7617af704511ed77cec9447", codeResult.ContainerId);
     }
 
     [Fact]

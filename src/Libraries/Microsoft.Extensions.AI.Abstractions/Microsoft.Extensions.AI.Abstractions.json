@@ -1506,11 +1506,21 @@
       ],
       "Properties": [
         {
-          "Member": "string? Microsoft.Extensions.AI.CodeInterpreterToolResultContent.ContainerId { get; set; }",
+          "Member": "System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? Microsoft.Extensions.AI.CodeInterpreterToolResultContent.Outputs { get; set; }",
+          "Stage": "Experimental"
+        }
+      ]
+    },
+    {
+      "Type": "abstract class Microsoft.Extensions.AI.ContainerInfo",
+      "Stage": "Experimental",
+      "Methods": [
+        {
+          "Member": "static Microsoft.Extensions.AI.CreateNewContainerInfo Microsoft.Extensions.AI.ContainerInfo.CreateNew(System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? inputs = null);",
           "Stage": "Experimental"
         },
         {
-          "Member": "System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? Microsoft.Extensions.AI.CodeInterpreterToolResultContent.Outputs { get; set; }",
+          "Member": "static Microsoft.Extensions.AI.ExistingContainerInfo Microsoft.Extensions.AI.ContainerInfo.FromExisting(string containerId);",
           "Stage": "Experimental"
         }
       ]
@@ -1527,6 +1537,22 @@
       "Properties": [
         {
           "Member": "Microsoft.Extensions.AI.RealtimeConversationItem Microsoft.Extensions.AI.CreateConversationItemRealtimeClientMessage.Item { get; set; }",
+          "Stage": "Experimental"
+        }
+      ]
+    },
+    {
+      "Type": "sealed class Microsoft.Extensions.AI.CreateNewContainerInfo : Microsoft.Extensions.AI.ContainerInfo",
+      "Stage": "Experimental",
+      "Methods": [
+        {
+          "Member": "Microsoft.Extensions.AI.CreateNewContainerInfo.CreateNewContainerInfo(System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? inputs = null);",
+          "Stage": "Experimental"
+        }
+      ],
+      "Properties": [
+        {
+          "Member": "System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? Microsoft.Extensions.AI.CreateNewContainerInfo.Inputs { get; set; }",
           "Stage": "Experimental"
         }
       ]
@@ -2134,6 +2160,22 @@
       ]
     },
     {
+      "Type": "sealed class Microsoft.Extensions.AI.ExistingContainerInfo : Microsoft.Extensions.AI.ContainerInfo",
+      "Stage": "Experimental",
+      "Methods": [
+        {
+          "Member": "Microsoft.Extensions.AI.ExistingContainerInfo.ExistingContainerInfo(string containerId);",
+          "Stage": "Experimental"
+        }
+      ],
+      "Properties": [
+        {
+          "Member": "string Microsoft.Extensions.AI.ExistingContainerInfo.ContainerId { get; set; }",
+          "Stage": "Experimental"
+        }
+      ]
+    },
+    {
       "Type": "class Microsoft.Extensions.AI.FunctionCallContent : Microsoft.Extensions.AI.ToolCallContent",
       "Stage": "Stable",
       "Methods": [
@@ -2284,7 +2326,7 @@
           "Stage": "Stable"
         },
         {
-          "Member": "string? Microsoft.Extensions.AI.HostedCodeInterpreterTool.ContainerId { get; set; }",
+          "Member": "Microsoft.Extensions.AI.ContainerInfo? Microsoft.Extensions.AI.HostedCodeInterpreterTool.Container { get; set; }",
           "Stage": "Experimental"
         },
         {

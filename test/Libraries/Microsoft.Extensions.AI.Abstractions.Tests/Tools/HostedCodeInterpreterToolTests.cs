@@ -16,8 +16,7 @@ public class HostedCodeInterpreterToolTests
         Assert.Equal("code_interpreter", tool.Name);
         Assert.Empty(tool.Description);
         Assert.Empty(tool.AdditionalProperties);
-        Assert.Null(tool.ContainerId);
-        Assert.Null(tool.Inputs);
+        Assert.Null(tool.Container);
         Assert.Equal(tool.Name, tool.ToString());
     }
 
@@ -44,19 +43,27 @@ public class HostedCodeInterpreterToolTests
     {
         var tool = new HostedCodeInterpreterTool
         {
-            ContainerId = "container-123",
-            Inputs =
-            [
-                new HostedFileContent("id123"),
-                new DataContent(new byte[] { 1, 2, 3 }, "application/octet-stream")
-            ]
+            Container = ContainerInfo.FromExisting("container-123"),
         };
 
-        Assert.Equal("container-123", tool.ContainerId);
-        Assert.NotNull(tool.Inputs);
-        Assert.Equal(2, tool.Inputs.Count);
-        Assert.IsType<HostedFileContent>(tool.Inputs[0]);
-        Assert.IsType<DataContent>(tool.Inputs[1]);
+        var container = Assert.IsType<ExistingContainerInfo>(tool.Container);
+        Assert.Equal("container-123", container.ContainerId);
+    }
+
+    [Fact]
+    public void CreateNewContainerInfo_Roundtrips()
+    {
+        IList<AIContent> inputs =
+        [
+            new HostedFileContent("id123"),
+            new DataContent(new byte[] { 1, 2, 3 }, "application/octet-stream")
+        ];
+
+        var container = ContainerInfo.CreateNew(inputs);
+
+        Assert.Same(inputs, container.Inputs);
+        Assert.IsType<HostedFileContent>(container.Inputs![0]);
+        Assert.IsType<DataContent>(container.Inputs[1]);
     }
 
     [Fact]
@@ -66,26 +73,24 @@ public class HostedCodeInterpreterToolTests
         List<AIContent> inputs = [new HostedFileContent("id123")];
         var tool = new HostedCodeInterpreterTool(props)
         {
-            ContainerId = "container-123",
-            Inputs = inputs,
+            Container = ContainerInfo.CreateNew(inputs),
         };
 
         var clone = tool.Clone();
 
         Assert.NotSame(tool, clone);
         Assert.IsType<HostedCodeInterpreterTool>(clone);
-        Assert.Equal("container-123", clone.ContainerId);
-        Assert.Same(inputs, clone.Inputs);
+        var container = Assert.IsType<CreateNewContainerInfo>(clone.Container);
+        Assert.Same(inputs, container.Inputs);
         Assert.Same(props, clone.AdditionalProperties);
     }
 
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
-    public void ContainerId_Invalid_Throws(string containerId)
+    public void ExistingContainerInfo_ContainerId_Invalid_Throws(string containerId)
     {
-        var tool = new HostedCodeInterpreterTool();
-
-        Assert.Throws<ArgumentException>("value", () => tool.ContainerId = containerId);
+        Assert.Throws<ArgumentException>(nameof(containerId), () => ContainerInfo.FromExisting(containerId));
+        Assert.Throws<ArgumentException>("value", () => new ExistingContainerInfo("container-123").ContainerId = containerId);
     }
 }

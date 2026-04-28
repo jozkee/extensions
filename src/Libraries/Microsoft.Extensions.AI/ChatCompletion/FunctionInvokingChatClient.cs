@@ -1066,7 +1066,6 @@ public class FunctionInvokingChatClient : DelegatingChatClient
                 containerId = contents[j] switch
                 {
                     CodeInterpreterToolCallContent { ContainerId: { } id } => id,
-                    CodeInterpreterToolResultContent { ContainerId: { } id } => id,
                     _ => containerId,
                 };
             }
@@ -1088,12 +1087,13 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         for (int i = 0; i < toolCount; i++)
         {
             if (tools[i] is HostedCodeInterpreterTool codeInterpreterTool &&
-                !string.Equals(codeInterpreterTool.ContainerId, containerId, StringComparison.Ordinal))
+                (codeInterpreterTool.Container is not ExistingContainerInfo existingContainer ||
+                !string.Equals(existingContainer.ContainerId, containerId, StringComparison.Ordinal)))
             {
                 updatedTools ??= [.. tools];
 
                 var updatedTool = codeInterpreterTool.Clone();
-                updatedTool.ContainerId = containerId;
+                updatedTool.Container = ContainerInfo.FromExisting(containerId);
                 updatedTools[i] = updatedTool;
             }
         }

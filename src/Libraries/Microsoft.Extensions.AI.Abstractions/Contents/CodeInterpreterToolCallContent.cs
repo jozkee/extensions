@@ -30,8 +30,8 @@ public sealed class CodeInterpreterToolCallContent : ToolCallContent
 
     /// <summary>Gets or sets the ID of the hosted container used for the tool call.</summary>
     /// <remarks>
-    /// The container ID can be supplied to <see cref="HostedCodeInterpreterTool.ContainerId"/> on a subsequent request
-    /// to reuse files and other state retained by the hosted code execution environment.
+    /// The container ID can be supplied to <see cref="ContainerInfo.FromExisting"/> on a subsequent request to reuse
+    /// files and other state retained by the hosted code execution environment.
     /// </remarks>
     /// <exception cref="ArgumentException"><paramref name="value"/> is empty or composed entirely of whitespace.</exception>
     public string? ContainerId

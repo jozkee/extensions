@@ -1,11 +1,9 @@
 ﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
-using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Shared.DiagnosticIds;
-using Microsoft.Shared.Diagnostics;
 
 namespace Microsoft.Extensions.AI;
 
@@ -34,8 +32,8 @@ public class HostedCodeInterpreterTool : AITool
     /// <summary>Creates a shallow clone of the current <see cref="HostedCodeInterpreterTool"/> instance.</summary>
     /// <returns>A shallow clone of the current <see cref="HostedCodeInterpreterTool"/> instance.</returns>
     /// <remarks>
-    /// The clone will have the same values for all properties as the original instance. Any collections, like
-    /// <see cref="Inputs"/> and <see cref="AdditionalProperties"/>, are shared with the original.
+    /// The clone will have the same values for all properties as the original instance. Any references, like
+    /// <see cref="Container"/> and <see cref="AdditionalProperties"/>, are shared with the original.
     /// </remarks>
     [Experimental(DiagnosticIds.Experiments.AICodeInterpreter, UrlFormat = DiagnosticIds.UrlFormat)]
     public virtual HostedCodeInterpreterTool Clone() => (HostedCodeInterpreterTool)MemberwiseClone();
@@ -46,24 +44,21 @@ public class HostedCodeInterpreterTool : AITool
     /// <inheritdoc />
     public override IReadOnlyDictionary<string, object?> AdditionalProperties => _additionalProperties ?? base.AdditionalProperties;
 
-    /// <summary>Gets or sets the ID of an existing hosted container to use for code interpreter tool calls.</summary>
+    /// <summary>Gets or sets information about the hosted container to use for code interpreter tool calls.</summary>
     /// <remarks>
     /// When <see langword="null"/>, the service may create a new container or use its default container-selection behavior.
-    /// When non-<see langword="null"/>, the service should use the referenced container if it is still available.
+    /// Use <see cref="ContainerInfo.FromExisting"/> to request reuse of an existing container, or
+    /// <see cref="ContainerInfo.CreateNew"/> to request creation of a new container with optional inputs.
     /// </remarks>
-    /// <exception cref="ArgumentException"><paramref name="value"/> is empty or composed entirely of whitespace.</exception>
     [Experimental(DiagnosticIds.Experiments.AICodeInterpreter, UrlFormat = DiagnosticIds.UrlFormat)]
-    public string? ContainerId
-    {
-        get;
-        set => field = value is not null ? Throw.IfNullOrWhitespace(value) : value;
-    }
+    public ContainerInfo? Container { get; set; }
 
     /// <summary>Gets or sets a collection of <see cref="AIContent"/> to be used as input to the code interpreter tool.</summary>
     /// <remarks>
     /// Services support different varied kinds of inputs. Most support the IDs of files that are hosted by the service,
     /// represented via <see cref="HostedFileContent"/>. Some also support binary data, represented via <see cref="DataContent"/>.
     /// Unsupported inputs will be ignored by the <see cref="IChatClient"/> to which the tool is passed.
+    /// Prefer <see cref="ContainerInfo.CreateNew"/> for new container configuration.
     /// </remarks>
     public IList<AIContent>? Inputs { get; set; }
 }

@@ -756,16 +756,6 @@
       ]
     },
     {
-      "Type": "sealed class Microsoft.Extensions.AI.AutomaticContainerInfo : Microsoft.Extensions.AI.ContainerInfo",
-      "Stage": "Experimental",
-      "Methods": [
-        {
-          "Member": "Microsoft.Extensions.AI.AutomaticContainerInfo.AutomaticContainerInfo();",
-          "Stage": "Experimental"
-        }
-      ]
-    },
-    {
       "Type": "sealed class Microsoft.Extensions.AI.BinaryEmbedding : Microsoft.Extensions.AI.Embedding",
       "Stage": "Stable",
       "Methods": [
@@ -1529,10 +1519,6 @@
       "Type": "abstract class Microsoft.Extensions.AI.ContainerInfo",
       "Stage": "Experimental",
       "Methods": [
-        {
-          "Member": "static Microsoft.Extensions.AI.AutomaticContainerInfo Microsoft.Extensions.AI.ContainerInfo.Automatic();",
-          "Stage": "Experimental"
-        },
         {
           "Member": "static Microsoft.Extensions.AI.ExistingContainerInfo Microsoft.Extensions.AI.ContainerInfo.FromExisting(string containerId);",
           "Stage": "Experimental"

@@ -66,7 +66,7 @@ Prototype artifacts:
 | --- | --- |
 | `dotnet/extensions` | Branch `api-proposal/meai-container-reuse` (not pushed) |
 | OpenAI Responses | In-tree prototype in `src\Libraries\Microsoft.Extensions.AI.OpenAI\OpenAIResponsesChatClient.cs` |
-| Anthropic | `D:\meai-proposal-scratch\container-reuse\anthropic-sdk-csharp`, branch `meai-proposal/container-reuse`, commit `9d9220a`, patch `D:\meai-proposal-scratch\container-reuse\anthropic-container-reuse.patch` |
+| Anthropic | `D:\meai-proposal-scratch\container-reuse\anthropic-sdk-csharp`, branch `meai-proposal/container-reuse`, commit `96319aa`, patch `D:\meai-proposal-scratch\container-reuse\anthropic-container-reuse.patch` |
 | Google Vertex AI | `D:\meai-proposal-scratch\container-reuse\google-cloud-dotnet`, branch `meai-proposal/container-reuse`, fit-check only: no reusable container ID in the code execution request/response shape |
 | Google Gemini / GenAI | `D:\meai-proposal-scratch\container-reuse\dotnet-genai`, branch `meai-proposal/container-reuse`, fit-check only: no reusable container ID in the code execution request/response shape |
 

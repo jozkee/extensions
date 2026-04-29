@@ -749,11 +749,10 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                 };
 
             case HostedCodeInterpreterTool codeTool:
-                IList<AIContent>? containerInputs = codeTool.Container is AutomaticContainerInfo { Inputs: { } inputs } ? inputs : codeTool.Inputs;
                 return new CodeInterpreterTool(
-                    codeTool.Container is ExistingContainerInfo { ContainerId: var containerId } ?
+                    options?.Container is ExistingContainerInfo { ContainerId: var containerId } ?
                         new(containerId) :
-                        new(containerInputs?.OfType<HostedFileContent>().Select(f => f.FileId).ToList() is { Count: > 0 } ids ?
+                        new(codeTool.Inputs?.OfType<HostedFileContent>().Select(f => f.FileId).ToList() is { Count: > 0 } ids ?
                             CodeInterpreterToolContainerConfiguration.CreateAutomaticContainerConfiguration(ids) :
                             new()));
 

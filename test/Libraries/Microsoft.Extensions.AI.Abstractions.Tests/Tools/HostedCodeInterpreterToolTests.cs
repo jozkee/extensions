@@ -16,7 +16,7 @@ public class HostedCodeInterpreterToolTests
         Assert.Equal("code_interpreter", tool.Name);
         Assert.Empty(tool.Description);
         Assert.Empty(tool.AdditionalProperties);
-        Assert.Null(tool.Container);
+        Assert.Null(tool.Inputs);
         Assert.Equal(tool.Name, tool.ToString());
     }
 
@@ -39,31 +39,31 @@ public class HostedCodeInterpreterToolTests
     }
 
     [Fact]
-    public void Properties_Roundtrip()
+    public void Inputs_Roundtrip()
     {
+        IList<AIContent> inputs = [new HostedFileContent("file-123")];
         var tool = new HostedCodeInterpreterTool
         {
-            Container = ContainerInfo.FromExisting("container-123"),
+            Inputs = inputs,
         };
 
-        var container = Assert.IsType<ExistingContainerInfo>(tool.Container);
+        Assert.Same(inputs, tool.Inputs);
+    }
+
+    [Fact]
+    public void ExistingContainerInfo_Roundtrips()
+    {
+        var container = ContainerInfo.FromExisting("container-123");
+
         Assert.Equal("container-123", container.ContainerId);
     }
 
     [Fact]
     public void AutomaticContainerInfo_Roundtrips()
     {
-        IList<AIContent> inputs =
-        [
-            new HostedFileContent("id123"),
-            new DataContent(new byte[] { 1, 2, 3 }, "application/octet-stream")
-        ];
+        var container = ContainerInfo.Automatic();
 
-        var container = ContainerInfo.Automatic(inputs);
-
-        Assert.Same(inputs, container.Inputs);
-        Assert.IsType<HostedFileContent>(container.Inputs![0]);
-        Assert.IsType<DataContent>(container.Inputs[1]);
+        Assert.IsType<AutomaticContainerInfo>(container);
     }
 
     [Theory]

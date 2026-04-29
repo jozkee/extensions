@@ -293,7 +293,7 @@ public class OpenAIConversionTests
         var fileContent = new HostedFileContent("file-123");
         var codeTool = new HostedCodeInterpreterTool
         {
-            Container = ContainerInfo.Automatic([fileContent])
+            Inputs = [fileContent]
         };
 
         var result = codeTool.AsOpenAIResponseTool();
@@ -303,21 +303,6 @@ public class OpenAIConversionTests
         var autoContainerConfig = Assert.IsType<AutomaticCodeInterpreterToolContainerConfiguration>(tool.Container.ContainerConfiguration);
         Assert.Single(autoContainerConfig.FileIds);
         Assert.Equal(fileContent.FileId, autoContainerConfig.FileIds[0]);
-    }
-
-    [Fact]
-    public void AsOpenAIResponseTool_WithHostedCodeInterpreterToolWithContainerId_ProducesValidCodeInterpreterTool()
-    {
-        var codeTool = new HostedCodeInterpreterTool
-        {
-            Container = ContainerInfo.FromExisting("cntr_123"),
-        };
-
-        var result = codeTool.AsOpenAIResponseTool();
-
-        Assert.NotNull(result);
-        var json = ModelReaderWriter.Write(result, ModelReaderWriterOptions.Json).ToString();
-        Assert.Contains("\"container\":\"cntr_123\"", json);
     }
 
     [Fact]

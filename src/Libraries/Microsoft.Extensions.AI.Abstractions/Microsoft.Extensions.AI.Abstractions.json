@@ -760,13 +760,7 @@
       "Stage": "Experimental",
       "Methods": [
         {
-          "Member": "Microsoft.Extensions.AI.AutomaticContainerInfo.AutomaticContainerInfo(System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? inputs = null);",
-          "Stage": "Experimental"
-        }
-      ],
-      "Properties": [
-        {
-          "Member": "System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? Microsoft.Extensions.AI.AutomaticContainerInfo.Inputs { get; set; }",
+          "Member": "Microsoft.Extensions.AI.AutomaticContainerInfo.AutomaticContainerInfo();",
           "Stage": "Experimental"
         }
       ]
@@ -1034,6 +1028,10 @@
         {
           "Member": "bool? Microsoft.Extensions.AI.ChatOptions.AllowMultipleToolCalls { get; set; }",
           "Stage": "Stable"
+        },
+        {
+          "Member": "Microsoft.Extensions.AI.ContainerInfo? Microsoft.Extensions.AI.ChatOptions.Container { get; set; }",
+          "Stage": "Experimental"
         },
         {
           "Member": "Microsoft.Extensions.AI.ResponseContinuationToken? Microsoft.Extensions.AI.ChatOptions.ContinuationToken { get; set; }",
@@ -1532,7 +1530,7 @@
       "Stage": "Experimental",
       "Methods": [
         {
-          "Member": "static Microsoft.Extensions.AI.AutomaticContainerInfo Microsoft.Extensions.AI.ContainerInfo.Automatic(System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? inputs = null);",
+          "Member": "static Microsoft.Extensions.AI.AutomaticContainerInfo Microsoft.Extensions.AI.ContainerInfo.Automatic();",
           "Stage": "Experimental"
         },
         {
@@ -2320,10 +2318,6 @@
         {
           "Member": "override System.Collections.Generic.IReadOnlyDictionary<string, object?> Microsoft.Extensions.AI.HostedCodeInterpreterTool.AdditionalProperties { get; }",
           "Stage": "Stable"
-        },
-        {
-          "Member": "Microsoft.Extensions.AI.ContainerInfo? Microsoft.Extensions.AI.HostedCodeInterpreterTool.Container { get; set; }",
-          "Stage": "Experimental"
         },
         {
           "Member": "System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? Microsoft.Extensions.AI.HostedCodeInterpreterTool.Inputs { get; set; }",

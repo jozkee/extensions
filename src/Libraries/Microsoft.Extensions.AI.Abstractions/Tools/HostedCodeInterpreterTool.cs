@@ -1,9 +1,7 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
-using Microsoft.Shared.DiagnosticIds;
 
 namespace Microsoft.Extensions.AI;
 
@@ -11,6 +9,7 @@ namespace Microsoft.Extensions.AI;
 /// <remarks>
 /// This tool does not itself implement code interpretation. It is a marker that can be used to inform a service
 /// that the service is allowed to execute its generated code if the service is capable of doing so.
+/// To control container provisioning or reuse, set <see cref="ChatOptions.Container"/> on the request.
 /// </remarks>
 public class HostedCodeInterpreterTool : AITool
 {
@@ -35,22 +34,11 @@ public class HostedCodeInterpreterTool : AITool
     /// <inheritdoc />
     public override IReadOnlyDictionary<string, object?> AdditionalProperties => _additionalProperties ?? base.AdditionalProperties;
 
-    /// <summary>Gets or sets information about the hosted container to use for code interpreter tool calls.</summary>
-    /// <remarks>
-    /// When <see langword="null"/>, the <see cref="IChatClient"/> chooses how the container is provisioned. Adapters
-    /// may walk the supplied chat history to reuse the most recent container ID returned by the service.
-    /// Use <see cref="ContainerInfo.FromExisting"/> to require reuse of a specific container, or
-    /// <see cref="ContainerInfo.Automatic"/> to delegate provisioning to the service.
-    /// </remarks>
-    [Experimental(DiagnosticIds.Experiments.AICodeInterpreter, UrlFormat = DiagnosticIds.UrlFormat)]
-    public ContainerInfo? Container { get; set; }
-
     /// <summary>Gets or sets a collection of <see cref="AIContent"/> to be used as input to the code interpreter tool.</summary>
     /// <remarks>
     /// Services support different varied kinds of inputs. Most support the IDs of files that are hosted by the service,
     /// represented via <see cref="HostedFileContent"/>. Some also support binary data, represented via <see cref="DataContent"/>.
     /// Unsupported inputs will be ignored by the <see cref="IChatClient"/> to which the tool is passed.
-    /// Prefer <see cref="ContainerInfo.Automatic"/> for new container configuration.
     /// </remarks>
     public IList<AIContent>? Inputs { get; set; }
 }

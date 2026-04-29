@@ -2,7 +2,6 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Shared.DiagnosticIds;
 
@@ -24,12 +23,11 @@ public abstract class ContainerInfo
     public static ExistingContainerInfo FromExisting(string containerId) => new(containerId);
 
     /// <summary>Creates a <see cref="ContainerInfo"/> instance that delegates container provisioning to the service.</summary>
-    /// <param name="inputs">Content to make available to the hosted container.</param>
     /// <returns>An <see cref="AutomaticContainerInfo"/> instance.</returns>
     /// <remarks>
     /// Some services always allocate a fresh container in this mode, while others reuse a container associated with
     /// the current conversation or message history. Use <see cref="FromExisting"/> when a specific container ID must
     /// be reused.
     /// </remarks>
-    public static AutomaticContainerInfo Automatic(IList<AIContent>? inputs = null) => new(inputs);
+    public static AutomaticContainerInfo Automatic() => new();
 }

@@ -29,6 +29,7 @@ public class ChatOptions
         AdditionalProperties = other.AdditionalProperties?.Clone();
         AllowBackgroundResponses = other.AllowBackgroundResponses;
         AllowMultipleToolCalls = other.AllowMultipleToolCalls;
+        Container = other.Container;
         ConversationId = other.ConversationId;
         ContinuationToken = other.ContinuationToken;
         FrequencyPenalty = other.FrequencyPenalty;
@@ -244,6 +245,17 @@ public class ChatOptions
 
     /// <summary>Gets or sets any additional properties associated with the options.</summary>
     public AdditionalPropertiesDictionary? AdditionalProperties { get; set; }
+
+    /// <summary>Gets or sets information about the hosted container to use for code interpreter and other container-aware hosted tool calls.</summary>
+    /// <remarks>
+    /// The container is shared by all container-aware hosted tools in the request. When <see langword="null"/>,
+    /// the <see cref="IChatClient"/> chooses how the container is provisioned. Use <see cref="ContainerInfo.FromExisting"/>
+    /// to require reuse of a specific container, or <see cref="ContainerInfo.Automatic"/> to delegate provisioning to
+    /// the service. Adapters may also use <see cref="AutomaticContainerInfo"/> as an opt-in to history-based container
+    /// reuse, lifting the most recent container ID observed in the supplied chat history.
+    /// </remarks>
+    [Experimental(DiagnosticIds.Experiments.AICodeInterpreter, UrlFormat = DiagnosticIds.UrlFormat)]
+    public ContainerInfo? Container { get; set; }
 
     /// <summary>Produces a clone of the current <see cref="ChatOptions"/> instance.</summary>
     /// <returns>A clone of the current <see cref="ChatOptions"/> instance.</returns>

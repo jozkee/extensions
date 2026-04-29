@@ -32,6 +32,7 @@ public class ChatOptionsTests
         Assert.Null(options.Tools);
         Assert.Null(options.AdditionalProperties);
         Assert.Null(options.RawRepresentationFactory);
+        Assert.Null(options.Container);
 
         ChatOptions clone = options.Clone();
         Assert.Null(clone.ConversationId);
@@ -54,6 +55,7 @@ public class ChatOptionsTests
         Assert.Null(clone.RawRepresentationFactory);
         Assert.Null(clone.ContinuationToken);
         Assert.Null(clone.AllowBackgroundResponses);
+        Assert.Null(clone.Container);
     }
 
     [Fact]
@@ -102,6 +104,7 @@ public class ChatOptionsTests
         options.AdditionalProperties = additionalProps;
         options.ContinuationToken = continuationToken;
         options.AllowBackgroundResponses = true;
+        options.Container = ContainerInfo.FromExisting("cntr_abc");
 
         Assert.Equal("12345", options.ConversationId);
         Assert.Equal("Some instructions", options.Instructions);
@@ -149,6 +152,7 @@ public class ChatOptionsTests
         Assert.Equal(additionalProps, clone.AdditionalProperties);
         Assert.Same(continuationToken, clone.ContinuationToken);
         Assert.True(clone.AllowBackgroundResponses);
+        Assert.Same(options.Container, clone.Container);
     }
 
     [Fact]

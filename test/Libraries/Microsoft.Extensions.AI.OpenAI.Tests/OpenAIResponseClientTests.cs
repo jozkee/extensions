@@ -3422,12 +3422,10 @@ public class OpenAIResponseClientTests
 
         var response = await client.GetResponseAsync("Use the existing data file", new()
         {
+            Container = ContainerInfo.FromExisting("cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4"),
             Tools =
             [
-                new HostedCodeInterpreterTool
-                {
-                    Container = ContainerInfo.FromExisting("cntr_68fb7476c384819186524b78cdc3180000a9a0fdd06b3cd4"),
-                }
+                new HostedCodeInterpreterTool(),
             ],
         });
 

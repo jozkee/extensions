@@ -3734,16 +3734,21 @@ public class OpenAIResponseClientTests
         var codeInterpreterCallUpdates = updates.Where(u =>
             u.Contents != null && u.Contents.Any(c => c is CodeInterpreterToolCallContent)).ToList();
 
-        Assert.Equal(4, codeInterpreterCallUpdates.Count);
-        Assert.Equal("cntr_68fc3b80043c8191990a5837d7617af704511ed77cec9447",
-            codeInterpreterCallUpdates[0].Contents.OfType<CodeInterpreterToolCallContent>().Single().ContainerId);
+        // Verify we got streaming updates with code interpreter call content (one per code delta).
+        // Each delta carries the container_id captured from the earlier output_item.added event.
+        Assert.Equal(3, codeInterpreterCallUpdates.Count);
+        foreach (var update in codeInterpreterCallUpdates)
+        {
+            var content = update.Contents.OfType<CodeInterpreterToolCallContent>().Single();
+            Assert.Equal("ci_05d8f42f04f94cb80068fc3b80fba8819ea3bfbdd36e94bcf3", content.CallId);
+            Assert.Equal("cntr_68fc3b80043c8191990a5837d7617af704511ed77cec9447", content.ContainerId);
+        }
 
-        // Verify the deltas have the expected call ID and concatenate the code
+        // Concatenate the delta code
         StringBuilder codeBuilder = new();
-        foreach (var update in codeInterpreterCallUpdates.Skip(1))
+        foreach (var update in codeInterpreterCallUpdates)
         {
             var content = update.Contents.OfType<CodeInterpreterToolCallContent>().First();
-            Assert.Equal("ci_05d8f42f04f94cb80068fc3b80fba8819ea3bfbdd36e94bcf3", content.CallId);
 
             // Concatenate the delta code
             if (content.Inputs is { Count: > 0 })

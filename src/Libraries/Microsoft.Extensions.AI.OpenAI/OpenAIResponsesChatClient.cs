@@ -365,6 +365,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
         bool anyFunctions = false;
         bool storedOutputDisabled = false;
         ResponseStatus? latestResponseStatus = null;
+        string? lastCodeInterpreterContainerId = null;
         Dictionary<string, ToolApprovalRequestContent>? mcpApprovalRequests = null;
 
         UpdateConversationId(resumeResponseId);
@@ -452,28 +453,21 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                         case MessageResponseItem mri:
                             lastMessageId = outputItemAddedUpdate.Item.Id;
                             lastRole = AsChatRole(mri.Role);
-                            yield return CreateUpdate();
                             break;
 
                         case FunctionCallResponseItem fcri:
                             anyFunctions = true;
                             lastRole = ChatRole.Assistant;
-                            yield return CreateUpdate();
                             break;
 
                         case CodeInterpreterCallResponseItem cicri:
-                            yield return CreateUpdate(new CodeInterpreterToolCallContent(cicri.Id)
-                            {
-                                ContainerId = cicri.ContainerId,
-                                RawRepresentation = outputItemAddedUpdate,
-                            });
-                            break;
-
-                        default:
-                            yield return CreateUpdate();
+                            // Capture the container ID early so subsequent code-delta updates can carry it.
+                            // The deltas themselves don't include container_id; coalescing merges them with this value.
+                            lastCodeInterpreterContainerId = cicri.ContainerId;
                             break;
                     }
-                    break;
+
+                    goto default;
 
                 case StreamingResponseOutputTextDeltaUpdate outputTextDeltaUpdate:
                     yield return CreateUpdate(new TextContent(outputTextDeltaUpdate.Delta));
@@ -501,6 +495,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                 case StreamingResponseCodeInterpreterCallCodeDeltaUpdate codeInterpreterDeltaUpdate:
                     yield return CreateUpdate(new CodeInterpreterToolCallContent(codeInterpreterDeltaUpdate.ItemId)
                     {
+                        ContainerId = lastCodeInterpreterContainerId,
                         Inputs = [new DataContent(Encoding.UTF8.GetBytes(codeInterpreterDeltaUpdate.Delta), OpenAIClientExtensions.PythonMediaType)],
                         RawRepresentation = codeInterpreterDeltaUpdate,
                     });

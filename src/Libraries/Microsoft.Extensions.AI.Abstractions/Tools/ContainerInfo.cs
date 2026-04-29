@@ -23,8 +23,13 @@ public abstract class ContainerInfo
     /// <exception cref="ArgumentException"><paramref name="containerId"/> is empty or composed entirely of whitespace.</exception>
     public static ExistingContainerInfo FromExisting(string containerId) => new(containerId);
 
-    /// <summary>Creates a <see cref="ContainerInfo"/> instance that requests creation of a new hosted container.</summary>
-    /// <param name="inputs">Content to make available to the new hosted container.</param>
-    /// <returns>A <see cref="CreateNewContainerInfo"/> instance.</returns>
-    public static CreateNewContainerInfo CreateNew(IList<AIContent>? inputs = null) => new(inputs);
+    /// <summary>Creates a <see cref="ContainerInfo"/> instance that delegates container provisioning to the service.</summary>
+    /// <param name="inputs">Content to make available to the hosted container.</param>
+    /// <returns>An <see cref="AutomaticContainerInfo"/> instance.</returns>
+    /// <remarks>
+    /// Some services always allocate a fresh container in this mode, while others reuse a container associated with
+    /// the current conversation or message history. Use <see cref="FromExisting"/> when a specific container ID must
+    /// be reused.
+    /// </remarks>
+    public static AutomaticContainerInfo Automatic(IList<AIContent>? inputs = null) => new(inputs);
 }

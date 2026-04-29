@@ -754,7 +754,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                 };
 
             case HostedCodeInterpreterTool codeTool:
-                IList<AIContent>? containerInputs = codeTool.Container is CreateNewContainerInfo { Inputs: { } inputs } ? inputs : codeTool.Inputs;
+                IList<AIContent>? containerInputs = codeTool.Container is AutomaticContainerInfo { Inputs: { } inputs } ? inputs : codeTool.Inputs;
                 return new CodeInterpreterTool(
                     codeTool.Container is ExistingContainerInfo { ContainerId: var containerId } ?
                         new(containerId) :

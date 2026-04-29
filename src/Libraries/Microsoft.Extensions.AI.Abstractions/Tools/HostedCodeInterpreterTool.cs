@@ -29,15 +29,6 @@ public class HostedCodeInterpreterTool : AITool
         _additionalProperties = additionalProperties;
     }
 
-    /// <summary>Creates a shallow clone of the current <see cref="HostedCodeInterpreterTool"/> instance.</summary>
-    /// <returns>A shallow clone of the current <see cref="HostedCodeInterpreterTool"/> instance.</returns>
-    /// <remarks>
-    /// The clone will have the same values for all properties as the original instance. Any references, like
-    /// <see cref="Container"/> and <see cref="AdditionalProperties"/>, are shared with the original.
-    /// </remarks>
-    [Experimental(DiagnosticIds.Experiments.AICodeInterpreter, UrlFormat = DiagnosticIds.UrlFormat)]
-    public virtual HostedCodeInterpreterTool Clone() => (HostedCodeInterpreterTool)MemberwiseClone();
-
     /// <inheritdoc />
     public override string Name => "code_interpreter";
 
@@ -46,9 +37,10 @@ public class HostedCodeInterpreterTool : AITool
 
     /// <summary>Gets or sets information about the hosted container to use for code interpreter tool calls.</summary>
     /// <remarks>
-    /// When <see langword="null"/>, the service may create a new container or use its default container-selection behavior.
-    /// Use <see cref="ContainerInfo.FromExisting"/> to request reuse of an existing container, or
-    /// <see cref="ContainerInfo.CreateNew"/> to request creation of a new container with optional inputs.
+    /// When <see langword="null"/>, the <see cref="IChatClient"/> chooses how the container is provisioned. Adapters
+    /// may walk the supplied chat history to reuse the most recent container ID returned by the service.
+    /// Use <see cref="ContainerInfo.FromExisting"/> to require reuse of a specific container, or
+    /// <see cref="ContainerInfo.Automatic"/> to delegate provisioning to the service.
     /// </remarks>
     [Experimental(DiagnosticIds.Experiments.AICodeInterpreter, UrlFormat = DiagnosticIds.UrlFormat)]
     public ContainerInfo? Container { get; set; }
@@ -58,7 +50,7 @@ public class HostedCodeInterpreterTool : AITool
     /// Services support different varied kinds of inputs. Most support the IDs of files that are hosted by the service,
     /// represented via <see cref="HostedFileContent"/>. Some also support binary data, represented via <see cref="DataContent"/>.
     /// Unsupported inputs will be ignored by the <see cref="IChatClient"/> to which the tool is passed.
-    /// Prefer <see cref="ContainerInfo.CreateNew"/> for new container configuration.
+    /// Prefer <see cref="ContainerInfo.Automatic"/> for new container configuration.
     /// </remarks>
     public IList<AIContent>? Inputs { get; set; }
 }

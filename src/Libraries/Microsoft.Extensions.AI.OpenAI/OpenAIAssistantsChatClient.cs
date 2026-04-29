@@ -389,7 +389,7 @@ internal sealed class OpenAIAssistantsChatClient : IChatClient
                             var interpreterToolDef = ToolDefinition.CreateCodeInterpreter();
                             _ = toolsOverride.Add(interpreterToolDef);
 
-                            IList<AIContent>? containerInputs = codeInterpreterTool.Container is CreateNewContainerInfo { Inputs: { } inputs } ? inputs : codeInterpreterTool.Inputs;
+                            IList<AIContent>? containerInputs = codeInterpreterTool.Container is AutomaticContainerInfo { Inputs: { } inputs } ? inputs : codeInterpreterTool.Inputs;
                             if (containerInputs?.Count is > 0)
                             {
                                 ThreadInitializationMessage? threadInitializationMessage = null;

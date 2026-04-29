@@ -12,7 +12,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Shared.DiagnosticIds;
 using Microsoft.Shared.Diagnostics;
 
 #pragma warning disable CA2213 // Disposable fields should be disposed
@@ -265,28 +264,6 @@ public class FunctionInvokingChatClient : DelegatingChatClient
     /// </remarks>
     public bool TerminateOnUnknownCalls { get; set; }
 
-    /// <summary>
-    /// Gets or sets a value indicating whether to reuse hosted code interpreter containers across function invocation iterations.
-    /// </summary>
-    /// <value>
-    /// <see langword="true"/> to propagate container IDs from hosted code interpreter tool call or result content
-    /// to subsequent inner client requests; otherwise, <see langword="false"/>. The default is <see langword="false"/>.
-    /// </value>
-    /// <remarks>
-    /// <para>
-    /// Some services support tools that execute code in a hosted container and can pause that execution to request local
-    /// function results. When enabled, this client copies the container ID returned by such a service into a
-    /// <see cref="HostedCodeInterpreterTool"/> supplied in <see cref="ChatOptions.Tools"/> for the next iteration of
-    /// the function invocation loop.
-    /// </para>
-    /// <para>
-    /// This setting does not add a <see cref="HostedCodeInterpreterTool"/> if one was not supplied in the original
-    /// <see cref="ChatOptions.Tools"/> collection.
-    /// </para>
-    /// </remarks>
-    [Experimental(DiagnosticIds.Experiments.AICodeInterpreter, UrlFormat = DiagnosticIds.UrlFormat)]
-    public bool EnableCodeInterpreterContainerReuse { get; set; }
-
     /// <summary>Gets or sets a delegate used to invoke <see cref="AIFunction"/> instances.</summary>
     /// <remarks>
     /// By default, the protected <see cref="InvokeFunctionAsync"/> method is called for each <see cref="AIFunction"/> to be invoked,
@@ -439,8 +416,7 @@ public class FunctionInvokingChatClient : DelegatingChatClient
 
             UpdateOptionsForNextIteration(
                 ref options,
-                response.ConversationId,
-                EnableCodeInterpreterContainerReuse ? GetCodeInterpreterContainerId(response.Messages) : null);
+                response.ConversationId);
         }
 
         Debug.Assert(responseMessages is not null, "Expected to only be here if we have response messages.");
@@ -718,8 +694,7 @@ public class FunctionInvokingChatClient : DelegatingChatClient
 
             UpdateOptionsForNextIteration(
                 ref options,
-                response.ConversationId,
-                EnableCodeInterpreterContainerReuse ? GetCodeInterpreterContainerId(response.Messages) : null);
+                response.ConversationId);
         }
 
         AddUsageTags(activity, totalUsage);
@@ -1008,7 +983,7 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         }
     }
 
-    private static void UpdateOptionsForNextIteration(ref ChatOptions? options, string? conversationId, string? codeInterpreterContainerId)
+    private static void UpdateOptionsForNextIteration(ref ChatOptions? options, string? conversationId)
     {
         if (options is null)
         {
@@ -1044,64 +1019,6 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         if (options?.ContinuationToken is not null)
         {
             options.ContinuationToken = null;
-        }
-
-        if (codeInterpreterContainerId is not null)
-        {
-            UpdateCodeInterpreterContainerId(ref options, codeInterpreterContainerId);
-        }
-    }
-
-    /// <summary>Gets the last hosted code interpreter container ID found in <paramref name="messages"/>.</summary>
-    private static string? GetCodeInterpreterContainerId(IList<ChatMessage> messages)
-    {
-        string? containerId = null;
-        int messageCount = messages.Count;
-        for (int i = 0; i < messageCount; i++)
-        {
-            IList<AIContent> contents = messages[i].Contents;
-            int contentCount = contents.Count;
-            for (int j = 0; j < contentCount; j++)
-            {
-                containerId = contents[j] switch
-                {
-                    CodeInterpreterToolCallContent { ContainerId: { } id } => id,
-                    _ => containerId,
-                };
-            }
-        }
-
-        return containerId;
-    }
-
-    /// <summary>Updates hosted code interpreter tools in <paramref name="options"/> with <paramref name="containerId"/>.</summary>
-    private static void UpdateCodeInterpreterContainerId(ref ChatOptions? options, string containerId)
-    {
-        if (options?.Tools is not { Count: > 0 } tools)
-        {
-            return;
-        }
-
-        List<AITool>? updatedTools = null;
-        int toolCount = tools.Count;
-        for (int i = 0; i < toolCount; i++)
-        {
-            if (tools[i] is HostedCodeInterpreterTool codeInterpreterTool &&
-                (codeInterpreterTool.Container is not ExistingContainerInfo existingContainer ||
-                !string.Equals(existingContainer.ContainerId, containerId, StringComparison.Ordinal)))
-            {
-                updatedTools ??= [.. tools];
-
-                var updatedTool = codeInterpreterTool.Clone();
-                updatedTool.Container = ContainerInfo.FromExisting(containerId);
-                updatedTools[i] = updatedTool;
-            }
-        }
-
-        if (updatedTools is not null)
-        {
-            options = options.Clone();
-            options.Tools = updatedTools;
         }
     }
 

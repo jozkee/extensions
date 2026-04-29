@@ -51,7 +51,7 @@ public class HostedCodeInterpreterToolTests
     }
 
     [Fact]
-    public void CreateNewContainerInfo_Roundtrips()
+    public void AutomaticContainerInfo_Roundtrips()
     {
         IList<AIContent> inputs =
         [
@@ -59,30 +59,11 @@ public class HostedCodeInterpreterToolTests
             new DataContent(new byte[] { 1, 2, 3 }, "application/octet-stream")
         ];
 
-        var container = ContainerInfo.CreateNew(inputs);
+        var container = ContainerInfo.Automatic(inputs);
 
         Assert.Same(inputs, container.Inputs);
         Assert.IsType<HostedFileContent>(container.Inputs![0]);
         Assert.IsType<DataContent>(container.Inputs[1]);
-    }
-
-    [Fact]
-    public void Clone_ReturnsShallowCopy()
-    {
-        var props = new Dictionary<string, object?> { ["key"] = "value" };
-        List<AIContent> inputs = [new HostedFileContent("id123")];
-        var tool = new HostedCodeInterpreterTool(props)
-        {
-            Container = ContainerInfo.CreateNew(inputs),
-        };
-
-        var clone = tool.Clone();
-
-        Assert.NotSame(tool, clone);
-        Assert.IsType<HostedCodeInterpreterTool>(clone);
-        var container = Assert.IsType<CreateNewContainerInfo>(clone.Container);
-        Assert.Same(inputs, container.Inputs);
-        Assert.Same(props, clone.AdditionalProperties);
     }
 
     [Theory]

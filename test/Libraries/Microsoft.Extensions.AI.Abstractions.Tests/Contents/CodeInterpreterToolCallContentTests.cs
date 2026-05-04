@@ -1,6 +1,7 @@
 // Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using Xunit;
@@ -16,6 +17,7 @@ public class CodeInterpreterToolCallContentTests
         Assert.Null(c.RawRepresentation);
         Assert.Null(c.AdditionalProperties);
         Assert.Equal("callId1", c.CallId);
+        Assert.Null(c.ContainerId);
         Assert.Null(c.Inputs);
     }
 
@@ -25,6 +27,10 @@ public class CodeInterpreterToolCallContentTests
         CodeInterpreterToolCallContent c = new("call123");
 
         Assert.Equal("call123", c.CallId);
+
+        Assert.Null(c.ContainerId);
+        c.ContainerId = "container123";
+        Assert.Equal("container123", c.ContainerId);
 
         Assert.Null(c.Inputs);
         IList<AIContent> inputs = [new TextContent("print('hello')")];
@@ -67,6 +73,7 @@ public class CodeInterpreterToolCallContentTests
     {
         CodeInterpreterToolCallContent content = new("call123")
         {
+            ContainerId = "container456",
             Inputs =
             [
                 new TextContent("print('hello')"),
@@ -79,6 +86,7 @@ public class CodeInterpreterToolCallContentTests
 
         Assert.NotNull(deserializedSut);
         Assert.Equal("call123", deserializedSut.CallId);
+        Assert.Equal("container456", deserializedSut.ContainerId);
         Assert.NotNull(deserializedSut.Inputs);
         Assert.Equal(2, deserializedSut.Inputs.Count);
         Assert.IsType<TextContent>(deserializedSut.Inputs[0]);
@@ -94,6 +102,7 @@ public class CodeInterpreterToolCallContentTests
             {
               "$type": "codeInterpreterToolCall",
               "callId": "ci-call1",
+              "containerId": "container789",
               "inputs": [
                 {
                   "$type": "text",
@@ -111,11 +120,22 @@ public class CodeInterpreterToolCallContentTests
         Assert.NotNull(result);
         var ciCall = Assert.IsType<CodeInterpreterToolCallContent>(result);
         Assert.Equal("ci-call1", ciCall.CallId);
+        Assert.Equal("container789", ciCall.ContainerId);
         Assert.NotNull(ciCall.Inputs);
         Assert.Single(ciCall.Inputs);
         var textInput = Assert.IsType<TextContent>(ciCall.Inputs[0]);
         Assert.Equal("print('hello')", textInput.Text);
         Assert.NotNull(ciCall.AdditionalProperties);
         Assert.Equal("val", ciCall.AdditionalProperties["key"]?.ToString());
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" ")]
+    public void ContainerId_Invalid_Throws(string containerId)
+    {
+        var content = new CodeInterpreterToolCallContent("call123");
+
+        Assert.Throws<ArgumentException>("value", () => content.ContainerId = containerId);
     }
 }

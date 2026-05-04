@@ -253,6 +253,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                 case CodeInterpreterCallResponseItem cicri:
                     message.Contents.Add(new CodeInterpreterToolCallContent(cicri.Id)
                     {
+                        ContainerId = cicri.ContainerId,
                         Inputs = !string.IsNullOrWhiteSpace(cicri.Code) ? [new DataContent(Encoding.UTF8.GetBytes(cicri.Code), OpenAIClientExtensions.PythonMediaType)] : null,
 
                         // We purposefully do not set the RawRepresentation on the CodeInterpreterToolCallContent, only on the CodeInterpreterToolResultContent, to avoid
@@ -373,6 +374,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
         string? serviceTier = null;
         string? systemFingerprint = null;
         ResponseStatus? latestResponseStatus = null;
+        string? lastCodeInterpreterContainerId = null;
         Dictionary<string, ToolApprovalRequestContent>? mcpApprovalRequests = null;
 
         UpdateConversationId(resumeResponseId);
@@ -466,6 +468,12 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                             anyFunctions = true;
                             lastRole = ChatRole.Assistant;
                             break;
+
+                        case CodeInterpreterCallResponseItem cicri:
+                            // Capture the container ID early so subsequent code-delta updates can carry it.
+                            // The deltas themselves don't include container_id; coalescing merges them with this value.
+                            lastCodeInterpreterContainerId = cicri.ContainerId;
+                            break;
                     }
 
                     goto default;
@@ -496,6 +504,7 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
                 case StreamingResponseCodeInterpreterCallCodeDeltaUpdate codeInterpreterDeltaUpdate:
                     yield return CreateUpdate(new CodeInterpreterToolCallContent(codeInterpreterDeltaUpdate.ItemId)
                     {
+                        ContainerId = lastCodeInterpreterContainerId,
                         Inputs = [new DataContent(Encoding.UTF8.GetBytes(codeInterpreterDeltaUpdate.Delta), OpenAIClientExtensions.PythonMediaType)],
                         RawRepresentation = codeInterpreterDeltaUpdate,
                     });
@@ -755,9 +764,11 @@ internal sealed class OpenAIResponsesChatClient : IChatClient
 
             case HostedCodeInterpreterTool codeTool:
                 return new CodeInterpreterTool(
-                    new(codeTool.Inputs?.OfType<HostedFileContent>().Select(f => f.FileId).ToList() is { Count: > 0 } ids ?
-                        CodeInterpreterToolContainerConfiguration.CreateAutomaticContainerConfiguration(ids) :
-                        new()));
+                    options?.Container is ExistingContainerInfo { ContainerId: var containerId } ?
+                        new(containerId) :
+                        new(codeTool.Inputs?.OfType<HostedFileContent>().Select(f => f.FileId).ToList() is { Count: > 0 } ids ?
+                            CodeInterpreterToolContainerConfiguration.CreateAutomaticContainerConfiguration(ids) :
+                            new()));
 
             case HostedImageGenerationTool imageGenerationTool:
                 ImageGenerationOptions? igo = imageGenerationTool.Options;

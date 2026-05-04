@@ -1020,6 +1020,10 @@
           "Stage": "Stable"
         },
         {
+          "Member": "Microsoft.Extensions.AI.ContainerInfo? Microsoft.Extensions.AI.ChatOptions.Container { get; set; }",
+          "Stage": "Experimental"
+        },
+        {
           "Member": "Microsoft.Extensions.AI.ResponseContinuationToken? Microsoft.Extensions.AI.ChatOptions.ContinuationToken { get; set; }",
           "Stage": "Experimental"
         },
@@ -1486,6 +1490,10 @@
       ],
       "Properties": [
         {
+          "Member": "string? Microsoft.Extensions.AI.CodeInterpreterToolCallContent.ContainerId { get; set; }",
+          "Stage": "Stable"
+        },
+        {
           "Member": "System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? Microsoft.Extensions.AI.CodeInterpreterToolCallContent.Inputs { get; set; }",
           "Stage": "Stable"
         }
@@ -1504,6 +1512,16 @@
         {
           "Member": "System.Collections.Generic.IList<Microsoft.Extensions.AI.AIContent>? Microsoft.Extensions.AI.CodeInterpreterToolResultContent.Outputs { get; set; }",
           "Stage": "Stable"
+        }
+      ]
+    },
+    {
+      "Type": "abstract class Microsoft.Extensions.AI.ContainerInfo",
+      "Stage": "Experimental",
+      "Methods": [
+        {
+          "Member": "static Microsoft.Extensions.AI.ExistingContainerInfo Microsoft.Extensions.AI.ContainerInfo.FromExisting(string containerId);",
+          "Stage": "Experimental"
         }
       ]
     },
@@ -2121,6 +2139,22 @@
         },
         {
           "Member": "string? Microsoft.Extensions.AI.ErrorRealtimeServerMessage.OriginatingMessageId { get; set; }",
+          "Stage": "Experimental"
+        }
+      ]
+    },
+    {
+      "Type": "sealed class Microsoft.Extensions.AI.ExistingContainerInfo : Microsoft.Extensions.AI.ContainerInfo",
+      "Stage": "Experimental",
+      "Methods": [
+        {
+          "Member": "Microsoft.Extensions.AI.ExistingContainerInfo.ExistingContainerInfo(string containerId);",
+          "Stage": "Experimental"
+        }
+      ],
+      "Properties": [
+        {
+          "Member": "string Microsoft.Extensions.AI.ExistingContainerInfo.ContainerId { get; set; }",
           "Stage": "Experimental"
         }
       ]

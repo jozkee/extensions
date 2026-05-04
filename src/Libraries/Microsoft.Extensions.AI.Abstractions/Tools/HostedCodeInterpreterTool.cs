@@ -1,4 +1,4 @@
-﻿// Licensed to the .NET Foundation under one or more agreements.
+// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 
 using System.Collections.Generic;
@@ -9,6 +9,7 @@ namespace Microsoft.Extensions.AI;
 /// <remarks>
 /// This tool does not itself implement code interpretation. It is a marker that can be used to inform a service
 /// that the service is allowed to execute its generated code if the service is capable of doing so.
+/// To control container provisioning or reuse, set <see cref="ChatOptions.Container"/> on the request.
 /// </remarks>
 public class HostedCodeInterpreterTool : AITool
 {

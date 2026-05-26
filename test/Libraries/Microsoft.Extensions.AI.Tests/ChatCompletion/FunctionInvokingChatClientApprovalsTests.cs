@@ -1560,6 +1560,110 @@ public class FunctionInvokingChatClientApprovalsTests
         await InvokeAndAssertStreamingAsync(options, input, downstreamClientOutput, output, expectedDownstreamClientInput, additionalTools: useAdditionalTools ? tools : null);
     }
 
+    /// <summary>
+    /// Demonstrates issue #7533: When a caller's transcript contains resolved approval pairs
+    /// (ToolApprovalRequest + ToolApprovalResponse + FunctionResult) without a separate FunctionCallContent
+    /// message — as happens after serialization/deserialization — the extraction logic removes the TARC
+    /// (which contains the embedded FCC) but does not recreate the FCC for already-executed approvals.
+    /// This leaves orphan FunctionResultContent entries whose tool_call_id has no matching
+    /// FunctionCallContent in any preceding assistant message, violating the OpenAI Chat Completions spec.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AlreadyExecutedApprovalsWithoutSeparateFccMessage_OrphansFunctionResult(bool streaming)
+    {
+        var options = new ChatOptions
+        {
+            Tools =
+            [
+                new ApprovalRequiredAIFunction(AIFunctionFactory.Create(() => "Result 1", "Func1")),
+                new ApprovalRequiredAIFunction(AIFunctionFactory.Create(() => "Result 2", "Func2")),
+            ]
+        };
+
+        // Simulate a caller transcript after serialization where the intermediate FCC messages
+        // (from preDownstreamCallHistory) are NOT present, but the approval pairs and FRCs are.
+        // This mirrors what happens when a caller stores TARC + TAResp + FRC from resolved turns
+        // but does not include the FCC message that MEAI generated internally.
+        List<ChatMessage> input =
+        [
+            new ChatMessage(ChatRole.User, "hello"),
+
+            // Earlier resolved approval pair #1 — no separate FCC message in transcript
+            new ChatMessage(ChatRole.Assistant,
+            [
+                new ToolApprovalRequestContent("ficc_callId1", new FunctionCallContent("callId1", "Func1")),
+            ]) { MessageId = "resp1" },
+            new ChatMessage(ChatRole.User,
+            [
+                new ToolApprovalResponseContent("ficc_callId1", true, new FunctionCallContent("callId1", "Func1")),
+            ]),
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("callId1", result: "Result 1")]),
+
+            // Earlier resolved approval pair #2 — no separate FCC message in transcript
+            new ChatMessage(ChatRole.Assistant,
+            [
+                new ToolApprovalRequestContent("ficc_callId2", new FunctionCallContent("callId2", "Func2")),
+            ]) { MessageId = "resp2" },
+            new ChatMessage(ChatRole.User,
+            [
+                new ToolApprovalResponseContent("ficc_callId2", true, new FunctionCallContent("callId2", "Func2")),
+            ]),
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("callId2", result: "Result 2")]),
+
+            new ChatMessage(ChatRole.Assistant, "intermediate answer"),
+            new ChatMessage(ChatRole.User, "do something else"),
+
+            // New approval requiring resolution
+            new ChatMessage(ChatRole.Assistant,
+            [
+                new ToolApprovalRequestContent("ficc_callId3", new FunctionCallContent("callId3", "Func1")),
+            ]) { MessageId = "resp3" },
+            new ChatMessage(ChatRole.User,
+            [
+                new ToolApprovalResponseContent("ficc_callId3", true, new FunctionCallContent("callId3", "Func1")),
+            ]),
+        ];
+
+        // Expected: the inner client should receive messages where EVERY FunctionResultContent
+        // has a matching FunctionCallContent in the immediately preceding assistant message.
+        // The already-executed approvals should have their FCCs restored.
+        List<ChatMessage> expectedDownstreamClientInput =
+        [
+            new ChatMessage(ChatRole.User, "hello"),
+            new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("callId1", "Func1")]),
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("callId1", result: "Result 1")]),
+            new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("callId2", "Func2")]),
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("callId2", result: "Result 2")]),
+            new ChatMessage(ChatRole.Assistant, "intermediate answer"),
+            new ChatMessage(ChatRole.User, "do something else"),
+            new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("callId3", "Func1")]),
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("callId3", result: "Result 1")]),
+        ];
+
+        List<ChatMessage> downstreamClientOutput =
+        [
+            new ChatMessage(ChatRole.Assistant, "done"),
+        ];
+
+        List<ChatMessage> output =
+        [
+            new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("callId3", "Func1")]),
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("callId3", result: "Result 1")]),
+            new ChatMessage(ChatRole.Assistant, "done"),
+        ];
+
+        if (streaming)
+        {
+            await InvokeAndAssertStreamingAsync(options, input, downstreamClientOutput, output, expectedDownstreamClientInput);
+        }
+        else
+        {
+            await InvokeAndAssertAsync(options, input, downstreamClientOutput, output, expectedDownstreamClientInput);
+        }
+    }
+
     private static Task<List<ChatMessage>> InvokeAndAssertAsync(
         ChatOptions? options,
         List<ChatMessage> input,

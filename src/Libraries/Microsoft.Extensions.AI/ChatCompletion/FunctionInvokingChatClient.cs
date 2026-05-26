@@ -1437,12 +1437,22 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         }
 
         // 2nd iteration, over all approval responses:
+        // - For already-executed approvals, restore FunctionCallContent messages so their FunctionResultContent isn't orphaned.
         // - Filter out any approval responses that already have a matching function result (i.e. already executed).
         // - Find the matching function approval request for any response (where available).
-        // - Split the approval responses into two lists: approved and rejected, with their request messages (where available).
+        // - Split the remaining approval responses into two lists: approved and rejected, with their request messages (where available).
         List<ApprovalResultWithRequestMessage>? approvedFunctionCalls = null, rejectedFunctionCalls = null;
         if (allApprovalResponses is { Count: > 0 })
         {
+            // For already-executed approvals whose TARC was removed, we need to restore a FunctionCallContent
+            // assistant message before the corresponding FunctionResultContent. Without this, the tool result
+            // is orphaned (no preceding assistant tool_calls entry), violating the OpenAI Chat Completions spec.
+            // See https://github.com/dotnet/extensions/issues/7533.
+            if (functionResultCallIds is { Count: > 0 })
+            {
+                RestoreFunctionCallContentForExecutedApprovals(messages, allApprovalResponses, allApprovalRequestsMessages, functionResultCallIds);
+            }
+
             foreach (var approvalResponse in allApprovalResponses)
             {
                 // Skip any approval responses that have already been processed.
@@ -1469,6 +1479,118 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         }
 
         return (approvedFunctionCalls, rejectedFunctionCalls);
+    }
+
+    /// <summary>
+    /// For already-executed approval pairs (where a <see cref="FunctionResultContent"/> exists),
+    /// the extraction loop above removed the <see cref="ToolApprovalRequestContent"/> that contained the
+    /// <see cref="FunctionCallContent"/>. If the caller's transcript did not include a separate standalone
+    /// FCC message (common after serialization round-trips), the <see cref="FunctionResultContent"/> becomes
+    /// orphaned — its <c>tool_call_id</c> won't appear in any preceding assistant message's <c>tool_calls</c>,
+    /// violating the OpenAI Chat Completions spec.
+    /// This method restores a <see cref="FunctionCallContent"/> assistant message immediately before each
+    /// orphaned <see cref="FunctionResultContent"/> to maintain the required pairing.
+    /// </summary>
+    private static void RestoreFunctionCallContentForExecutedApprovals(
+        List<ChatMessage> messages,
+        List<ToolApprovalResponseContent> allApprovalResponses,
+        Dictionary<string, (ChatMessage Message, ToolApprovalRequestContent RequestContent)>? allApprovalRequestsMessages,
+        HashSet<string> functionResultCallIds)
+    {
+        // Build a lookup of already-executed approval responses by call id.
+        Dictionary<string, (ToolApprovalResponseContent Response, ChatMessage? RequestMessage)>? executedByCallId = null;
+        foreach (var approvalResponse in allApprovalResponses)
+        {
+            if (approvalResponse.ToolCall is FunctionCallContent fcc && functionResultCallIds.Contains(fcc.CallId))
+            {
+                // Check if a FunctionCallContent already exists in the messages for this call id.
+                // If it does, we don't need to restore one.
+                bool alreadyHasFcc = false;
+                foreach (var msg in messages)
+                {
+                    if (msg.Role == ChatRole.Assistant)
+                    {
+                        foreach (var c in msg.Contents)
+                        {
+                            if (c is FunctionCallContent existingFcc && existingFcc.CallId == fcc.CallId)
+                            {
+                                alreadyHasFcc = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (alreadyHasFcc)
+                    {
+                        break;
+                    }
+                }
+
+                if (!alreadyHasFcc)
+                {
+                    ChatMessage? requestMessage = null;
+                    if (allApprovalRequestsMessages is not null)
+                    {
+                        foreach (var kvp in allApprovalRequestsMessages)
+                        {
+                            if (kvp.Value.RequestContent.ToolCall.CallId == fcc.CallId)
+                            {
+                                requestMessage = kvp.Value.Message;
+                                break;
+                            }
+                        }
+                    }
+
+                    (executedByCallId ??= []).Add(fcc.CallId, (approvalResponse, requestMessage));
+                }
+            }
+        }
+
+        if (executedByCallId is null)
+        {
+            return;
+        }
+
+        // Walk through messages and insert FCC assistant messages before their orphaned FRC tool messages.
+        int messageIndex = 0;
+        while (messageIndex < messages.Count)
+        {
+            var message = messages[messageIndex];
+            if (message.Role != ChatRole.Tool)
+            {
+                messageIndex++;
+                continue;
+            }
+
+            // Collect all FCC that need to be inserted before this tool message.
+            List<FunctionCallContent>? fccsToInsert = null;
+            ChatMessage? requestMessageForClone = null;
+            foreach (var content in message.Contents)
+            {
+                if (content is FunctionResultContent frc && executedByCallId.Remove(frc.CallId, out var entry))
+                {
+                    var fcc = (FunctionCallContent)entry.Response.ToolCall;
+                    (fccsToInsert ??= []).Add(fcc);
+                    requestMessageForClone ??= entry.RequestMessage;
+                }
+            }
+
+            if (fccsToInsert is not null)
+            {
+                // Create an assistant message with the FCC(s) and insert it before the tool message.
+                ChatMessage fccMessage = requestMessageForClone?.Clone() ?? new() { Role = ChatRole.Assistant };
+                fccMessage.Contents = [.. fccsToInsert];
+                messages.Insert(messageIndex, fccMessage);
+                messageIndex++; // Skip past the inserted FCC message to the tool message.
+            }
+
+            messageIndex++;
+
+            if (executedByCallId.Count == 0)
+            {
+                break;
+            }
+        }
     }
 
     /// <summary>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(LatestTargetFramework)</TargetFramework>
+    <!-- Clear TargetFrameworks because it is set in ..\Directory.Build.props -->
+    <TargetFrameworks></TargetFrameworks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.AI" VersionOverride="10.6.0" />
+    <PackageReference Include="Microsoft.Extensions.AI.OpenAI" VersionOverride="10.6.0" />
+  </ItemGroup>
+
+</Project>

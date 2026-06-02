@@ -300,6 +300,12 @@ public class FunctionInvokingChatClient : DelegatingChatClient
 
         if (HasAnyApprovalContent(originalMessages))
         {
+            // Detach any messages chronologically after the last approval response so the append-based
+            // reconstruction below places the new FCC/FRC messages in their correct position. The stashed
+            // messages are re-appended after the approval-processing logic completes.
+            // Fixes https://github.com/dotnet/extensions/issues/7156.
+            var stashedTrailingMessages = StashTrailingMessagesAfterLastApprovalResponse(originalMessages);
+
             // A previous turn may have translated FunctionCallContents from the inner client into approval requests sent back to the caller,
             // for any AIFunctions that were actually ApprovalRequiredAIFunctions. If the incoming chat messages include responses to those
             // approval requests, we need to process them now. This entails removing these manufactured approval requests from the chat message
@@ -309,6 +315,11 @@ public class FunctionInvokingChatClient : DelegatingChatClient
                 originalMessages, !string.IsNullOrWhiteSpace(options?.ConversationId), toolMessageId: null, functionCallContentFallbackMessageId: null);
             (IList<ChatMessage>? invokedApprovedFunctionApprovalResponses, bool shouldTerminate, consecutiveErrorCount) =
                 await InvokeApprovedFunctionApprovalResponsesAsync(notInvokedApprovals, originalMessages, options, consecutiveErrorCount, isStreaming: false, cancellationToken);
+
+            if (stashedTrailingMessages is not null)
+            {
+                originalMessages.AddRange(stashedTrailingMessages);
+            }
 
             if (invokedApprovedFunctionApprovalResponses is not null)
             {
@@ -460,6 +471,12 @@ public class FunctionInvokingChatClient : DelegatingChatClient
 
         if (HasAnyApprovalContent(originalMessages))
         {
+            // Detach any messages chronologically after the last approval response so the append-based
+            // reconstruction below places the new FCC/FRC messages in their correct position. The stashed
+            // messages are re-appended after the approval-processing logic completes.
+            // Fixes https://github.com/dotnet/extensions/issues/7156.
+            var stashedTrailingMessages = StashTrailingMessagesAfterLastApprovalResponse(originalMessages);
+
             // We also need a synthetic ID for the function call content for approved function calls
             // where we don't know what the original message id of the function call was.
             string functionCallContentFallbackMessageId = Guid.NewGuid().ToString("N");
@@ -486,6 +503,11 @@ public class FunctionInvokingChatClient : DelegatingChatClient
             // Invoke approved approval responses, which generates some additional FRC wrapped in ChatMessage.
             (IList<ChatMessage>? invokedApprovedFunctionApprovalResponses, bool shouldTerminate, consecutiveErrorCount) =
                 await InvokeApprovedFunctionApprovalResponsesAsync(notInvokedApprovals, originalMessages, options, consecutiveErrorCount, isStreaming: true, cancellationToken);
+
+            if (stashedTrailingMessages is not null)
+            {
+                originalMessages.AddRange(stashedTrailingMessages);
+            }
 
             if (invokedApprovedFunctionApprovalResponses is not null)
             {
@@ -858,6 +880,57 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         messages.Exists(static m => m.Contents.Any(static c =>
             c is ToolApprovalRequestContent { ToolCall: FunctionCallContent { InformationalOnly: false } }
             or ToolApprovalResponseContent { ToolCall: FunctionCallContent { InformationalOnly: false } }));
+
+    /// <summary>
+    /// Detaches any messages that appear after the last <see cref="ToolApprovalResponseContent"/>-bearing message
+    /// in <paramref name="messages"/> and returns them. Returns <see langword="null"/> if there are no such trailing messages.
+    /// </summary>
+    /// <remarks>
+    /// The approval-processing code path (<see cref="ProcessFunctionApprovalResponses"/> /
+    /// <see cref="ProcessFunctionCallsAsync"/>) reconstructs <see cref="FunctionCallContent"/> and
+    /// <see cref="FunctionResultContent"/> messages by appending them to the message list. When a user message
+    /// has been appended after the approval response, that append would place the reconstructed messages in the
+    /// wrong chronological position. Callers stash the trailing messages with this helper, run the existing
+    /// append-based logic so the new messages land at the end of the (now-shorter) list, and re-append the stashed
+    /// messages afterwards to restore correct ordering. Fixes https://github.com/dotnet/extensions/issues/7156.
+    /// </remarks>
+    private static List<ChatMessage>? StashTrailingMessagesAfterLastApprovalResponse(List<ChatMessage> messages)
+    {
+        int lastApprovalIndex = -1;
+        for (int i = messages.Count - 1; i >= 0; i--)
+        {
+            var contents = messages[i].Contents;
+            for (int j = 0; j < contents.Count; j++)
+            {
+                if (contents[j] is ToolApprovalResponseContent)
+                {
+                    lastApprovalIndex = i;
+                    break;
+                }
+            }
+
+            if (lastApprovalIndex >= 0)
+            {
+                break;
+            }
+        }
+
+        int trailingStart = lastApprovalIndex + 1;
+        if (lastApprovalIndex < 0 || trailingStart >= messages.Count)
+        {
+            return null;
+        }
+
+        int trailingCount = messages.Count - trailingStart;
+        var stashed = new List<ChatMessage>(trailingCount);
+        for (int i = trailingStart; i < messages.Count; i++)
+        {
+            stashed.Add(messages[i]);
+        }
+
+        messages.RemoveRange(trailingStart, trailingCount);
+        return stashed;
+    }
 
     /// <summary>Copies any <see cref="FunctionCallContent"/> from <paramref name="messages"/> to <paramref name="functionCalls"/>.</summary>
     private static bool CopyFunctionCalls(

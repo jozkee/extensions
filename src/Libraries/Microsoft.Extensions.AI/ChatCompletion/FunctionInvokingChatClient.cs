@@ -305,10 +305,16 @@ public class FunctionInvokingChatClient : DelegatingChatClient
             // approval requests, we need to process them now. This entails removing these manufactured approval requests from the chat message
             // list and replacing them with the appropriate FunctionCallContents and FunctionResultContents that would have been generated if
             // the inner client had returned them directly.
-            (responseMessages, var notInvokedApprovals) = ProcessFunctionApprovalResponses(
+            (responseMessages, var notInvokedApprovals, var insertionAnchor) = ProcessFunctionApprovalResponses(
                 originalMessages, !string.IsNullOrWhiteSpace(options?.ConversationId), toolMessageId: null, functionCallContentFallbackMessageId: null);
             (IList<ChatMessage>? invokedApprovedFunctionApprovalResponses, bool shouldTerminate, consecutiveErrorCount) =
-                await InvokeApprovedFunctionApprovalResponsesAsync(notInvokedApprovals, originalMessages, options, consecutiveErrorCount, isStreaming: false, cancellationToken);
+                await InvokeApprovedFunctionApprovalResponsesAsync(notInvokedApprovals, originalMessages, options, consecutiveErrorCount, isStreaming: false, insertionAnchor, cancellationToken);
+
+            // The anchor (if any) has served its purpose; remove it so it doesn't leak into downstream calls.
+            if (insertionAnchor is not null)
+            {
+                _ = originalMessages.Remove(insertionAnchor);
+            }
 
             if (invokedApprovedFunctionApprovalResponses is not null)
             {
@@ -469,7 +475,7 @@ public class FunctionInvokingChatClient : DelegatingChatClient
             // approval requests, we need to process them now. This entails removing these manufactured approval requests from the chat message
             // list and replacing them with the appropriate FunctionCallContents and FunctionResultContents that would have been generated if
             // the inner client had returned them directly.
-            var (preDownstreamCallHistory, notInvokedApprovals) = ProcessFunctionApprovalResponses(
+            var (preDownstreamCallHistory, notInvokedApprovals, insertionAnchor) = ProcessFunctionApprovalResponses(
                 originalMessages, !string.IsNullOrWhiteSpace(options?.ConversationId), toolMessageId, functionCallContentFallbackMessageId);
             if (preDownstreamCallHistory is not null)
             {
@@ -485,7 +491,13 @@ public class FunctionInvokingChatClient : DelegatingChatClient
 
             // Invoke approved approval responses, which generates some additional FRC wrapped in ChatMessage.
             (IList<ChatMessage>? invokedApprovedFunctionApprovalResponses, bool shouldTerminate, consecutiveErrorCount) =
-                await InvokeApprovedFunctionApprovalResponsesAsync(notInvokedApprovals, originalMessages, options, consecutiveErrorCount, isStreaming: true, cancellationToken);
+                await InvokeApprovedFunctionApprovalResponsesAsync(notInvokedApprovals, originalMessages, options, consecutiveErrorCount, isStreaming: true, insertionAnchor, cancellationToken);
+
+            // The anchor (if any) has served its purpose; remove it so it doesn't leak into downstream calls.
+            if (insertionAnchor is not null)
+            {
+                _ = originalMessages.Remove(insertionAnchor);
+            }
 
             if (invokedApprovedFunctionApprovalResponses is not null)
             {
@@ -1129,11 +1141,16 @@ public class FunctionInvokingChatClient : DelegatingChatClient
     /// <param name="consecutiveErrorCount">The number of consecutive iterations, prior to this one, that were recorded as having function invocation errors.</param>
     /// <param name="isStreaming">Whether the function calls are being processed in a streaming context.</param>
     /// <param name="cancellationToken">The <see cref="CancellationToken"/> to monitor for cancellation requests.</param>
+    /// <param name="insertionAnchor">
+    /// Optional anchor message previously inserted into <paramref name="messages"/> marking the position at which
+    /// generated tool-result messages should be inserted (the anchor is left in place; insertion happens before it).
+    /// When <see langword="null"/> or the anchor cannot be located, the generated messages are appended.
+    /// </param>
     /// <returns>A value indicating how the caller should proceed.</returns>
     private async Task<(bool ShouldTerminate, int NewConsecutiveErrorCount, IList<ChatMessage> MessagesAdded)> ProcessFunctionCallsAsync(
         List<ChatMessage> messages, ChatOptions? options,
         List<FunctionCallContent> functionCallContents, int iteration, int consecutiveErrorCount,
-        bool isStreaming, CancellationToken cancellationToken)
+        bool isStreaming, CancellationToken cancellationToken, ChatMessage? insertionAnchor = null)
     {
         // We must add a response for every tool call, regardless of whether we successfully executed it or not.
         // If we successfully execute it, we'll add the result. If we don't, we'll add an error.
@@ -1174,7 +1191,26 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         IList<ChatMessage> addedMessages = CreateResponseMessages(results.ToArray());
         ThrowIfNoFunctionResultsAdded(addedMessages);
         UpdateConsecutiveErrorCountOrThrow(addedMessages, ref consecutiveErrorCount);
-        messages.AddRange(addedMessages);
+
+        int anchorIndex = insertionAnchor is not null ? messages.IndexOf(insertionAnchor) : -1;
+        if (anchorIndex >= 0)
+        {
+            if (addedMessages is List<ChatMessage> addedList)
+            {
+                messages.InsertRange(anchorIndex, addedList);
+            }
+            else
+            {
+                for (int i = 0; i < addedMessages.Count; i++)
+                {
+                    messages.Insert(anchorIndex + i, addedMessages[i]);
+                }
+            }
+        }
+        else
+        {
+            messages.AddRange(addedMessages);
+        }
 
         return (shouldTerminate, consecutiveErrorCount, addedMessages);
     }
@@ -1295,12 +1331,20 @@ public class FunctionInvokingChatClient : DelegatingChatClient
     /// 3. Generate failed <see cref="FunctionResultContent"/> for any rejected <see cref="ToolApprovalResponseContent"/>.
     /// 4. add all the new content items to <paramref name="originalMessages"/> and return them as the pre-invocation history.
     /// </summary>
-    private (List<ChatMessage>? preDownstreamCallHistory, List<ApprovalResultWithRequestMessage>? approvals) ProcessFunctionApprovalResponses(
+    /// <remarks>
+    /// When an anchor message is returned, callers are responsible for removing it from <paramref name="originalMessages"/>
+    /// once all approval-related insertions (including the approved tool-result insert performed by
+    /// <see cref="ProcessFunctionCallsAsync"/>) are complete.
+    /// </remarks>
+    private (List<ChatMessage>? preDownstreamCallHistory, List<ApprovalResultWithRequestMessage>? approvals, ChatMessage? insertionAnchor) ProcessFunctionApprovalResponses(
         List<ChatMessage> originalMessages, bool hasConversationId, string? toolMessageId, string? functionCallContentFallbackMessageId)
     {
         // Extract any approval responses where we need to execute or reject the function calls.
         // The original messages are also modified to remove all approval requests and responses.
+        // If at least one message was fully consumed by approval-content removal, an anchor message is inserted
+        // at that position so subsequent insertions land in the correct chronological slot rather than at the end.
         var notInvokedResponses = ExtractAndRemoveApprovalRequestsAndResponses(originalMessages);
+        ChatMessage? insertionAnchor = notInvokedResponses.insertionAnchor;
 
         // Wrap the function call content in message(s).
         ICollection<ChatMessage>? allPreDownstreamCallMessages = ConvertToFunctionCallContentMessages(
@@ -1322,7 +1366,7 @@ public class FunctionInvokingChatClient : DelegatingChatClient
             preDownstreamCallHistory = [.. allPreDownstreamCallMessages];
             if (!hasConversationId)
             {
-                originalMessages.AddRange(preDownstreamCallHistory);
+                InsertAtAnchorOrAppend(originalMessages, insertionAnchor, preDownstreamCallHistory);
             }
         }
 
@@ -1331,10 +1375,27 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         if (rejectedPreDownstreamCallResultsMessage is not null)
         {
             (preDownstreamCallHistory ??= []).Add(rejectedPreDownstreamCallResultsMessage);
-            originalMessages.Add(rejectedPreDownstreamCallResultsMessage);
+            InsertAtAnchorOrAppend(originalMessages, insertionAnchor, [rejectedPreDownstreamCallResultsMessage]);
         }
 
-        return (preDownstreamCallHistory, notInvokedResponses.approvals);
+        return (preDownstreamCallHistory, notInvokedResponses.approvals, insertionAnchor);
+    }
+
+    /// <summary>
+    /// Inserts <paramref name="toInsert"/> into <paramref name="messages"/> immediately before <paramref name="anchor"/>,
+    /// or appends them if the anchor is <see langword="null"/> or no longer present.
+    /// </summary>
+    private static void InsertAtAnchorOrAppend(List<ChatMessage> messages, ChatMessage? anchor, List<ChatMessage> toInsert)
+    {
+        int anchorIndex = anchor is not null ? messages.IndexOf(anchor) : -1;
+        if (anchorIndex >= 0)
+        {
+            messages.InsertRange(anchorIndex, toInsert);
+        }
+        else
+        {
+            messages.AddRange(toInsert);
+        }
     }
 
     /// <summary>
@@ -1346,7 +1407,7 @@ public class FunctionInvokingChatClient : DelegatingChatClient
     /// We can then use the metadata from these messages when we re-create the FunctionCallContent messages/updates to return to the caller. This way, when we finally do return
     /// the FunctionCallContent to users it's part of a message/update that contains the same metadata as originally returned to the downstream service.
     /// </remarks>
-    private (List<ApprovalResultWithRequestMessage>? approvals, List<ApprovalResultWithRequestMessage>? rejections) ExtractAndRemoveApprovalRequestsAndResponses(
+    private (List<ApprovalResultWithRequestMessage>? approvals, List<ApprovalResultWithRequestMessage>? rejections, ChatMessage? insertionAnchor) ExtractAndRemoveApprovalRequestsAndResponses(
         List<ChatMessage> messages)
     {
         Dictionary<string, (ChatMessage Message, ToolApprovalRequestContent RequestContent)>? allApprovalRequestsMessages = null;
@@ -1360,6 +1421,13 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         // - Build a list of the content we want to keep (everything except approval requests and responses) and create a new list of messages for those.
         // - Validate that we have an approval response for each approval request.
         bool anyRemoved = false;
+
+        // Tracks the index (in the pre-RemoveAll list) of the last message that was fully consumed
+        // by approval-content removal. We replace that slot with a sentinel anchor so that subsequent
+        // insertions into the post-RemoveAll list land at the correct chronological position
+        // (immediately after the last fully-consumed approval) rather than at the end.
+        // Fixes https://github.com/dotnet/extensions/issues/7156 without plumbing indices through callers.
+        int lastConsumedApprovalIndex = -1;
         int i = 0;
         for (; i < messages.Count; i++)
         {
@@ -1419,8 +1487,20 @@ public class FunctionInvokingChatClient : DelegatingChatClient
                     // result in an O(N^2) overall operation, we mark the message as null and then do a single pass removal of all nulls after the loop.
                     anyRemoved = true;
                     messages[i] = null!;
+                    lastConsumedApprovalIndex = i;
                 }
             }
+        }
+
+        // If we fully consumed at least one message, install a sentinel anchor at that slot so that
+        // post-compaction inserts land in the correct chronological position. Anchoring at the LAST
+        // consumed slot (not the first) preserves any already-executed FCC/FRC messages interleaved
+        // earlier in the list.
+        ChatMessage? insertionAnchor = null;
+        if (lastConsumedApprovalIndex >= 0)
+        {
+            insertionAnchor = new ChatMessage(ChatRole.System, contents: []);
+            messages[lastConsumedApprovalIndex] = insertionAnchor;
         }
 
         // Clean up any messages that were marked for removal during the iteration.
@@ -1468,7 +1548,7 @@ public class FunctionInvokingChatClient : DelegatingChatClient
             }
         }
 
-        return (approvedFunctionCalls, rejectedFunctionCalls);
+        return (approvedFunctionCalls, rejectedFunctionCalls, insertionAnchor);
     }
 
     /// <summary>
@@ -1713,6 +1793,7 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         ChatOptions? options,
         int consecutiveErrorCount,
         bool isStreaming,
+        ChatMessage? insertionAnchor,
         CancellationToken cancellationToken)
     {
         // Check if there are any function calls to do for any approved functions and execute them.
@@ -1720,7 +1801,7 @@ public class FunctionInvokingChatClient : DelegatingChatClient
         {
             // The FRC that is generated here is already added to originalMessages by ProcessFunctionCallsAsync.
             var modeAndMessages = await ProcessFunctionCallsAsync(
-                originalMessages, options, notInvokedApprovals.Select(x => x.Response.ToolCall).OfType<FunctionCallContent>().ToList(), 0, consecutiveErrorCount, isStreaming, cancellationToken);
+                originalMessages, options, notInvokedApprovals.Select(x => x.Response.ToolCall).OfType<FunctionCallContent>().ToList(), 0, consecutiveErrorCount, isStreaming, cancellationToken, insertionAnchor);
             consecutiveErrorCount = modeAndMessages.NewConsecutiveErrorCount;
 
             // Also mark the request's FCC as InformationalOnly to ensure consistency

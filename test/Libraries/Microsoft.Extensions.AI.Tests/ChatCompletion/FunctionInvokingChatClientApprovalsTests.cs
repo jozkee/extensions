@@ -299,6 +299,114 @@ public class FunctionInvokingChatClientApprovalsTests
     }
 
     [Fact]
+    public async Task ApprovedApprovalResponseFollowedByUserMessagePreservesOrderingAsync()
+    {
+        // Regression test for https://github.com/dotnet/extensions/issues/7156.
+        // When a user message is appended after an approval response, the reconstructed
+        // FunctionCallContent/FunctionResultContent messages must be inserted at the
+        // approval's original position rather than appended to the end of the list.
+        var options = new ChatOptions
+        {
+            Tools =
+            [
+                new ApprovalRequiredAIFunction(AIFunctionFactory.Create(() => "Result 1", "Func1")),
+            ]
+        };
+
+        List<ChatMessage> input =
+        [
+            new ChatMessage(ChatRole.User, "hello"),
+            new ChatMessage(ChatRole.Assistant,
+            [
+                new ToolApprovalRequestContent("ficc_callId1", new FunctionCallContent("callId1", "Func1")),
+            ]) { MessageId = "resp1" },
+            new ChatMessage(ChatRole.User,
+            [
+                new ToolApprovalResponseContent("ficc_callId1", true, new FunctionCallContent("callId1", "Func1")),
+            ]),
+            new ChatMessage(ChatRole.User, "follow-up question"),
+        ];
+
+        List<ChatMessage> expectedDownstreamClientInput =
+        [
+            new ChatMessage(ChatRole.User, "hello"),
+            new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("callId1", "Func1")]) { MessageId = "resp1" },
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("callId1", result: "Result 1")]),
+            new ChatMessage(ChatRole.User, "follow-up question"),
+        ];
+
+        List<ChatMessage> downstreamClientOutput =
+        [
+            new ChatMessage(ChatRole.Assistant, "world"),
+        ];
+
+        List<ChatMessage> output =
+        [
+            new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("callId1", "Func1")]) { MessageId = "resp1" },
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("callId1", result: "Result 1")]),
+            new ChatMessage(ChatRole.Assistant, "world"),
+        ];
+
+        await InvokeAndAssertAsync(options, input, downstreamClientOutput, output, expectedDownstreamClientInput);
+
+        await InvokeAndAssertStreamingAsync(options, input, downstreamClientOutput, output, expectedDownstreamClientInput);
+    }
+
+    [Fact]
+    public async Task RejectedApprovalResponseFollowedByUserMessagePreservesOrderingAsync()
+    {
+        // Regression test for https://github.com/dotnet/extensions/issues/7156.
+        // When a user message is appended after a rejected approval response, the
+        // reconstructed FunctionCallContent and failure FunctionResultContent must be
+        // inserted at the approval's original position rather than appended.
+        var options = new ChatOptions
+        {
+            Tools =
+            [
+                new ApprovalRequiredAIFunction(AIFunctionFactory.Create(() => "Result 1", "Func1")),
+            ]
+        };
+
+        List<ChatMessage> input =
+        [
+            new ChatMessage(ChatRole.User, "hello"),
+            new ChatMessage(ChatRole.Assistant,
+            [
+                new ToolApprovalRequestContent("ficc_callId1", new FunctionCallContent("callId1", "Func1")),
+            ]) { MessageId = "resp1" },
+            new ChatMessage(ChatRole.User,
+            [
+                new ToolApprovalResponseContent("ficc_callId1", false, new FunctionCallContent("callId1", "Func1")),
+            ]),
+            new ChatMessage(ChatRole.User, "follow-up question"),
+        ];
+
+        List<ChatMessage> expectedDownstreamClientInput =
+        [
+            new ChatMessage(ChatRole.User, "hello"),
+            new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("callId1", "Func1")]) { MessageId = "resp1" },
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("callId1", result: "Tool call invocation rejected.")]),
+            new ChatMessage(ChatRole.User, "follow-up question"),
+        ];
+
+        List<ChatMessage> downstreamClientOutput =
+        [
+            new ChatMessage(ChatRole.Assistant, "world"),
+        ];
+
+        List<ChatMessage> output =
+        [
+            new ChatMessage(ChatRole.Assistant, [new FunctionCallContent("callId1", "Func1")]) { MessageId = "resp1" },
+            new ChatMessage(ChatRole.Tool, [new FunctionResultContent("callId1", result: "Tool call invocation rejected.")]),
+            new ChatMessage(ChatRole.Assistant, "world"),
+        ];
+
+        await InvokeAndAssertAsync(options, input, downstreamClientOutput, output, expectedDownstreamClientInput);
+
+        await InvokeAndAssertStreamingAsync(options, input, downstreamClientOutput, output, expectedDownstreamClientInput);
+    }
+
+    [Fact]
     public async Task RejectedApprovalResponsesAreFailedAsync()
     {
         var options = new ChatOptions

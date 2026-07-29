@@ -78,8 +78,9 @@ public abstract class FailoverChatClient : RoutingChatClient
     /// <see cref="RoutingChatClient.SelectClientAsync"/>.
     /// </para>
     /// <para>
-    /// A <see langword="null"/> attempt is always terminal. If every callback completes successfully, every client
-    /// invocation produces one update and exactly one update per request is terminal.
+    /// A <see langword="null"/> attempt is always terminal and indicates that routing stopped between client
+    /// invocations, such as during selection or after cancellation was requested. If every callback completes
+    /// successfully, every client invocation produces one update and exactly one update per request is terminal.
     /// </para>
     /// <para>
     /// Exceptions from this method propagate to the caller. A terminal update exception replaces the response or
@@ -100,7 +101,9 @@ public abstract class FailoverChatClient : RoutingChatClient
         ChatOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        _ = Throw.IfNull(messages);
         var context = new RoutingContext(messages, options);
+        _ = context.BufferMessages();
         int? maximumAttempts = MaximumAttemptsPerRequest;
         int attemptCount = 0;
 
@@ -119,13 +122,14 @@ public abstract class FailoverChatClient : RoutingChatClient
                     attempt: null,
                     isTerminal: true,
                     cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 throw;
             }
 
             attemptCount++;
             ChatResponse? response = null;
             Exception? exception = null;
-            long start = Stopwatch.GetTimestamp();
+            Stopwatch stopwatch = Stopwatch.StartNew();
 
             try
             {
@@ -139,16 +143,17 @@ public abstract class FailoverChatClient : RoutingChatClient
                 exception = ex;
             }
 
+            stopwatch.Stop();
             var attempt = new FailoverChatClientAttempt(
                 selectedClient,
                 exception,
-                GetElapsedTime(start),
+                stopwatch.Elapsed,
                 timeToFirstUpdate: null,
                 responseCompleted: exception is null,
                 outputCommitted: false);
             bool isTerminal =
                 exception is null ||
-                IsCancellation(exception, cancellationToken) ||
+                cancellationToken.IsCancellationRequested ||
                 (maximumAttempts is int limit && attemptCount >= limit);
 
             await OnRoutingUpdateAsync(context, attempt, isTerminal, cancellationToken).ConfigureAwait(false);
@@ -156,6 +161,21 @@ public abstract class FailoverChatClient : RoutingChatClient
             if (exception is null)
             {
                 return response!;
+            }
+
+            bool cancellationRequested = cancellationToken.IsCancellationRequested;
+            if (!isTerminal && cancellationRequested)
+            {
+                await OnRoutingUpdateAsync(
+                    context,
+                    attempt: null,
+                    isTerminal: true,
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            if (cancellationRequested)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
             }
 
             if (isTerminal)
@@ -171,7 +191,9 @@ public abstract class FailoverChatClient : RoutingChatClient
         ChatOptions? options = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        _ = Throw.IfNull(messages);
         var context = new RoutingContext(messages, options);
+        _ = context.BufferMessages();
         int? maximumAttempts = MaximumAttemptsPerRequest;
         int attemptCount = 0;
 
@@ -190,6 +212,7 @@ public abstract class FailoverChatClient : RoutingChatClient
                     attempt: null,
                     isTerminal: true,
                     cancellationToken).ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
                 throw;
             }
 
@@ -197,10 +220,9 @@ public abstract class FailoverChatClient : RoutingChatClient
             bool reachedAttemptLimit = maximumAttempts is int limit && attemptCount >= limit;
             IAsyncEnumerator<ChatResponseUpdate>? enumerator = null;
             TimeSpan? timeToFirstUpdate = null;
-            TimeSpan activeDuration = TimeSpan.Zero;
             bool hasCurrent;
 
-            long operationStart = Stopwatch.GetTimestamp();
+            Stopwatch stopwatch = Stopwatch.StartNew();
             try
             {
                 enumerator = selectedClient
@@ -214,19 +236,33 @@ public abstract class FailoverChatClient : RoutingChatClient
             }
             catch (Exception ex)
             {
-                activeDuration += GetElapsedTime(operationStart);
-                Exception exception =
-                    (await DisposeAsync(enumerator, ex, cancellationToken).ConfigureAwait(false))!;
+                stopwatch.Stop();
+                Exception exception = (await DisposeAsync(enumerator, ex).ConfigureAwait(false))!;
                 var attempt = new FailoverChatClientAttempt(
                     selectedClient,
                     exception,
-                    activeDuration,
+                    stopwatch.Elapsed,
                     timeToFirstUpdate: null,
                     responseCompleted: false,
                     outputCommitted: false);
-                bool isTerminal = IsCancellation(exception, cancellationToken) || reachedAttemptLimit;
+                bool isTerminal = cancellationToken.IsCancellationRequested || reachedAttemptLimit;
 
                 await OnRoutingUpdateAsync(context, attempt, isTerminal, cancellationToken).ConfigureAwait(false);
+
+                bool cancellationRequested = cancellationToken.IsCancellationRequested;
+                if (!isTerminal && cancellationRequested)
+                {
+                    await OnRoutingUpdateAsync(
+                        context,
+                        attempt: null,
+                        isTerminal: true,
+                        cancellationToken).ConfigureAwait(false);
+                }
+
+                if (cancellationRequested)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
 
                 if (isTerminal)
                 {
@@ -236,7 +272,7 @@ public abstract class FailoverChatClient : RoutingChatClient
                 continue;
             }
 
-            activeDuration += GetElapsedTime(operationStart);
+            stopwatch.Stop();
             bool responseCompleted = false;
             bool outputCommitted = false;
             bool isTerminalAttempt = false;
@@ -246,22 +282,22 @@ public abstract class FailoverChatClient : RoutingChatClient
             {
                 while (hasCurrent)
                 {
-                    operationStart = Stopwatch.GetTimestamp();
+                    stopwatch.Start();
                     bool hasCurrentValue = TryGetCurrent(
                         enumerator,
                         out ChatResponseUpdate current,
                         out terminalException);
-                    activeDuration += GetElapsedTime(operationStart);
+                    stopwatch.Stop();
                     if (!hasCurrentValue)
                     {
                         break;
                     }
 
-                    timeToFirstUpdate ??= activeDuration;
+                    timeToFirstUpdate ??= stopwatch.Elapsed;
                     outputCommitted = true;
                     yield return current;
 
-                    operationStart = Stopwatch.GetTimestamp();
+                    stopwatch.Start();
                     try
                     {
                         hasCurrent = await enumerator.MoveNextAsync().ConfigureAwait(false);
@@ -273,7 +309,7 @@ public abstract class FailoverChatClient : RoutingChatClient
                     }
                     finally
                     {
-                        activeDuration += GetElapsedTime(operationStart);
+                        stopwatch.Stop();
                     }
                 }
 
@@ -281,22 +317,19 @@ public abstract class FailoverChatClient : RoutingChatClient
             }
             finally
             {
-                terminalException = await DisposeAsync(
-                    enumerator,
-                    terminalException,
-                    cancellationToken).ConfigureAwait(false);
+                terminalException = await DisposeAsync(enumerator, terminalException).ConfigureAwait(false);
 
                 var attempt = new FailoverChatClientAttempt(
                     selectedClient,
                     terminalException,
-                    activeDuration,
+                    stopwatch.Elapsed,
                     timeToFirstUpdate,
                     responseCompleted: responseCompleted && terminalException is null,
                     outputCommitted: outputCommitted);
                 isTerminalAttempt =
                     attempt.ResponseCompleted ||
                     outputCommitted ||
-                    IsCancellation(terminalException, cancellationToken) ||
+                    cancellationToken.IsCancellationRequested ||
                     reachedAttemptLimit;
 
                 await OnRoutingUpdateAsync(
@@ -305,9 +338,29 @@ public abstract class FailoverChatClient : RoutingChatClient
                     isTerminalAttempt,
                     cancellationToken).ConfigureAwait(false);
 
-                if (terminalException is not null && isTerminalAttempt)
+                bool cancellationRequested =
+                    terminalException is not null &&
+                    cancellationToken.IsCancellationRequested;
+                if (!isTerminalAttempt && cancellationRequested)
                 {
-                    Rethrow(terminalException);
+                    await OnRoutingUpdateAsync(
+                        context,
+                        attempt: null,
+                        isTerminal: true,
+                        cancellationToken).ConfigureAwait(false);
+                }
+
+                if (terminalException is not null)
+                {
+                    if (cancellationRequested)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                    }
+
+                    if (isTerminalAttempt)
+                    {
+                        Rethrow(terminalException);
+                    }
                 }
             }
 
@@ -320,13 +373,14 @@ public abstract class FailoverChatClient : RoutingChatClient
         }
     }
 
+    [SuppressMessage(
+        "Resilience",
+        "EA0014:The async method doesn't support cancellation",
+        Justification = "IAsyncDisposable.DisposeAsync does not support cancellation.")]
     private static async ValueTask<Exception?> DisposeAsync(
         IAsyncDisposable? disposable,
-        Exception? exception,
-        CancellationToken cancellationToken)
+        Exception? exception)
     {
-        _ = cancellationToken;
-
         if (disposable is not null)
         {
             try
@@ -341,17 +395,6 @@ public abstract class FailoverChatClient : RoutingChatClient
 
         return exception;
     }
-
-    private static TimeSpan GetElapsedTime(long startingTimestamp) =>
-#if NET
-        Stopwatch.GetElapsedTime(startingTimestamp);
-#else
-        new((long)((Stopwatch.GetTimestamp() - startingTimestamp) *
-            ((double)TimeSpan.TicksPerSecond / Stopwatch.Frequency)));
-#endif
-
-    private static bool IsCancellation(Exception? exception, CancellationToken cancellationToken) =>
-        exception is OperationCanceledException || cancellationToken.IsCancellationRequested;
 
     private static bool TryGetCurrent(
         IAsyncEnumerator<ChatResponseUpdate> enumerator,
@@ -372,11 +415,12 @@ public abstract class FailoverChatClient : RoutingChatClient
         }
     }
 
+#if NET
     [DoesNotReturn]
+#endif
     private static void Rethrow(Exception exception)
     {
         ExceptionDispatchInfo.Capture(exception).Throw();
-        throw exception;
     }
 
 }

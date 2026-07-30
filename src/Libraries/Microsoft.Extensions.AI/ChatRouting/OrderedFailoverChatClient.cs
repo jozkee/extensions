@@ -28,8 +28,6 @@ public sealed class OrderedFailoverChatClient : FailoverChatClient
 {
     private readonly bool _leaveOpen;
     private readonly IChatClient[] _clients;
-    private readonly Dictionary<RoutingContext, RequestState> _requestStates = [];
-    private readonly object _sync = new();
     private bool _disposed;
 
     /// <summary>Initializes a new instance of the <see cref="OrderedFailoverChatClient"/> class.</summary>
@@ -74,62 +72,32 @@ public sealed class OrderedFailoverChatClient : FailoverChatClient
         RoutingContext context,
         CancellationToken cancellationToken)
     {
-        _ = cancellationToken;
-        RequestState? state;
-
-        lock (_sync)
-        {
-            if (!_requestStates.TryGetValue(context, out state))
-            {
-                return new(_clients[0]);
-            }
-
-            _ = _requestStates.Remove(context);
-        }
-
-        if (state.ClientIndex < _clients.Length)
-        {
-            return new(_clients[state.ClientIndex]);
-        }
-
-        ExceptionDispatchInfo.Capture(state.LastException).Throw();
-        throw state.LastException;
-    }
-
-    /// <inheritdoc/>
-    protected override ValueTask OnRoutingUpdateAsync(
-        RoutingContext context,
-        FailoverChatClientAttempt? attempt,
-        bool isTerminal,
-        CancellationToken cancellationToken)
-    {
+        _ = context;
         _ = cancellationToken;
 
-        lock (_sync)
+        if (PreviousAttempt is not { } previous)
         {
-            if (isTerminal)
-            {
-                _ = _requestStates.Remove(context);
-                return default;
-            }
-
-            if (attempt?.Exception is null)
-            {
-                _ = _requestStates.Remove(context);
-                throw new InvalidOperationException("A nonterminal routing update requires a failed client invocation.");
-            }
-
-            int clientIndex = IndexOfClient(attempt.Client);
-            if (clientIndex < 0)
-            {
-                _ = _requestStates.Remove(context);
-                throw new InvalidOperationException("The invocation did not use a configured ordered failover client.");
-            }
-
-            _requestStates[context] = new(clientIndex + 1, attempt.Exception);
+            return new(_clients[0]);
         }
 
-        return default;
+        int clientIndex = IndexOfClient(previous.Client);
+        if (clientIndex < 0)
+        {
+            throw new InvalidOperationException("The invocation did not use a configured ordered failover client.");
+        }
+
+        if (previous.Exception is not { } lastException)
+        {
+            throw new InvalidOperationException("Failover requires the previous client invocation to have failed.");
+        }
+
+        if (clientIndex + 1 < _clients.Length)
+        {
+            return new(_clients[clientIndex + 1]);
+        }
+
+        ExceptionDispatchInfo.Capture(lastException).Throw();
+        throw lastException;
     }
 
     /// <inheritdoc/>
@@ -143,11 +111,6 @@ public sealed class OrderedFailoverChatClient : FailoverChatClient
         _disposed = true;
         try
         {
-            lock (_sync)
-            {
-                _requestStates.Clear();
-            }
-
             if (disposing && !_leaveOpen)
             {
                 foreach (IChatClient client in _clients)
@@ -173,12 +136,5 @@ public sealed class OrderedFailoverChatClient : FailoverChatClient
         }
 
         return -1;
-    }
-
-    private sealed class RequestState(int clientIndex, Exception lastException)
-    {
-        public int ClientIndex { get; } = clientIndex;
-
-        public Exception LastException { get; } = lastException;
     }
 }

@@ -512,6 +512,10 @@
       ],
       "Properties": [
         {
+          "Member": "static Microsoft.Extensions.AI.FailoverChatClientAttempt? Microsoft.Extensions.AI.FailoverChatClient.PreviousAttempt { get; protected set; }",
+          "Stage": "Experimental"
+        },
+        {
           "Member": "int? Microsoft.Extensions.AI.FailoverChatClient.MaximumAttemptsPerRequest { get; set; }",
           "Stage": "Experimental"
         }
@@ -1493,10 +1497,6 @@
         },
         {
           "Member": "override void Microsoft.Extensions.AI.OrderedFailoverChatClient.Dispose(bool disposing);",
-          "Stage": "Experimental"
-        },
-        {
-          "Member": "override System.Threading.Tasks.ValueTask Microsoft.Extensions.AI.OrderedFailoverChatClient.OnRoutingUpdateAsync(Microsoft.Extensions.AI.RoutingContext context, Microsoft.Extensions.AI.FailoverChatClientAttempt? attempt, bool isTerminal, System.Threading.CancellationToken cancellationToken);",
           "Stage": "Experimental"
         },
         {
